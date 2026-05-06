@@ -3,12 +3,17 @@
  * Centralized API client for all admin CRUD operations
  */
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "https://studentsresearchlab-coge.onrender.com/api";
+const RAW_API_BASE_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://127.0.0.1:8000/api";
+
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "");
 
 // Get token from localStorage
 const getAuthToken = (): string | null => {
   try {
-    return localStorage.getItem("adminToken");
+    return localStorage.getItem("adminToken") || localStorage.getItem("authToken");
   } catch {
     return null;
   }
@@ -18,6 +23,7 @@ const getAuthToken = (): string | null => {
 export const setAuthToken = (token: string) => {
   try {
     localStorage.setItem("adminToken", token);
+    localStorage.setItem("authToken", token);
   } catch (error) {
     console.error("Failed to save auth token:", error);
   }
@@ -27,6 +33,7 @@ export const setAuthToken = (token: string) => {
 export const clearAuthToken = () => {
   try {
     localStorage.removeItem("adminToken");
+    localStorage.removeItem("authToken");
   } catch (error) {
     console.error("Failed to clear auth token:", error);
   }
@@ -60,7 +67,7 @@ const apiCall = async (
   }
 
   try {
-    const fullUrl = `${API_BASE_URL}${endpoint}`;
+    const fullUrl = `${API_BASE_URL}/api${endpoint}`;
     console.debug(`[API] ${method} ${endpoint}${token ? " (with token)" : " (no token)"}`);
     
     const response = await fetch(fullUrl, options);
