@@ -5,6 +5,13 @@ import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ScoreRow {
   id: string;
@@ -24,13 +31,15 @@ export default function Scores() {
   const [fetchError, setFetchError] = useState("");
   const [cachedLeaderboardStats, setCachedLeaderboardStats] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
-  
-  // Edit mode state
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<number>(0);
   const [isAddingScore, setIsAddingScore] = useState(false);
   const [newScoreEnrollment, setNewScoreEnrollment] = useState("");
   const [newScorePoints, setNewScorePoints] = useState(0);
+  const [searchName, setSearchName] = useState("");
 
   const canEdit = hasWriteAccess();
   const { toast } = useToast();
@@ -200,6 +209,7 @@ export default function Scores() {
         .sort((a, b) => b.points - a.points);
 
       setScores(scoreRows);
+      setCurrentPage(1); // Reset to page 1 when month changes
     } catch (error: any) {
       console.error("Error processing scores:", error);
       setScores([]);
@@ -231,7 +241,7 @@ export default function Scores() {
         setNewScoreEnrollment("");
         setNewScorePoints(0);
         setIsAddingScore(false);
-        
+
         const scoresResponse = await adminAPI.getScores();
         if (scoresResponse.success) {
           const leaderboardStats = Array.isArray(scoresResponse.data.leaderboardStats) ? scoresResponse.data.leaderboardStats : [];
@@ -269,7 +279,7 @@ export default function Scores() {
           description: "Score updated successfully",
         });
         setEditingId(null);
-        
+
         const scoresResponse = await adminAPI.getScores();
         if (scoresResponse.success) {
           const leaderboardStats = Array.isArray(scoresResponse.data.leaderboardStats) ? scoresResponse.data.leaderboardStats : [];
@@ -295,191 +305,268 @@ export default function Scores() {
   };
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="space-y-3 max-w-full pl-6 md:pl-10 pr-4 -mt-2">
       {/* Month Selection Filter */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-        <h2 className="text-base sm:text-lg font-semibold text-foreground shrink-0">
-          Scores for
-        </h2>
-        {!canEdit && <p className="text-xs text-muted-foreground sm:ml-2">You have read-only access.</p>}
-        <select
-          id="month-select"
-          value={selectedMonth || ""}
-          onChange={(e) => setSelectedMonth(e.target.value || null)}
-          className="px-2 py-1.5 sm:py-1 rounded border text-sm flex-1 sm:flex-none"
-          style={{ color: 'black' }}
-          disabled={monthOptions.length === 0}
-        >
-          {monthOptions.map((month, index) => (
-            <option key={`month-${index}`} value={month}>
-              {month}
-            </option>
-          ))}
-        </select>
-      </motion.div>
-
-      {/* Add Score Button (Admin Only) */}
-      {canEdit && !isAddingScore && (
-        <div className="flex gap-2">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+          <h2 className="text-base sm:text-lg font-semibold text-stone-800 shrink-0">
+            Scores for
+          </h2>
+          {!canEdit && <p className="text-xs text-muted-foreground sm:ml-2">You have read-only access.</p>}
+          <Select
+            value={selectedMonth || ""}
+            onValueChange={(value) => setSelectedMonth(value || null)}
+            disabled={monthOptions.length === 0}
+          >
+            <SelectTrigger className="px-3 py-1.5 h-auto rounded-lg border-2 border-yellow-200 bg-yellow-50 text-stone-800 text-sm font-medium w-32 sm:w-auto hover:bg-stone-50 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-200/50">
+              <SelectValue placeholder="Select Month" />
+            </SelectTrigger>
+            <SelectContent className="bg-yellow-50 border-2 border-yellow-200">
+              {monthOptions.map((month, index) => (
+                <SelectItem 
+                  key={`month-${index}`} 
+                  value={month}
+                  className="focus:bg-amber-200 focus:text-amber-900 cursor-pointer text-stone-800 font-medium"
+                >
+                  {month}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {canEdit && (
           <button
             onClick={() => setIsAddingScore(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-full text-sm font-bold transition-all shadow-md active:scale-95"
           >
-            <Plus className="w-4 h-4" /> Add Score
+            <Plus className="w-4 h-4" />
+            Add Score
           </button>
-        </div>
-      )}
+        )}
+      </motion.div>
 
-      {/* Add Score Form (Admin Only) */}
-      {canEdit && isAddingScore && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card rounded-lg p-4 space-y-3 border border-border"
-        >
-          <h3 className="font-medium text-sm">Add New Score</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <select
-              value={newScoreEnrollment}
-              onChange={(e) => setNewScoreEnrollment(e.target.value)}
-              className="border px-3 py-2 rounded text-sm"
-            >
-              <option value="">Select Student</option>
-              {Array.from(students.entries()).map(([enrollment, name]) => (
-                <option key={enrollment} value={enrollment}>
-                  {name} ({enrollment})
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min="0"
-              value={newScorePoints}
-              onChange={(e) => setNewScorePoints(Number(e.target.value))}
-              placeholder="Score"
-              className="border px-3 py-2 rounded text-sm"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={handleAddScore}
-                className="flex-1 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
-              >
-                <Check className="w-4 h-4" /> Add
-              </button>
-              <button
-                onClick={() => {
-                  setIsAddingScore(false);
-                  setNewScoreEnrollment("");
-                  setNewScorePoints(0);
-                }}
-                className="flex-1 px-3 py-2 bg-gray-400 text-white rounded text-sm hover:bg-gray-500 transition-colors flex items-center justify-center gap-2"
-              >
-                <X className="w-4 h-4" /> Cancel
-              </button>
+      {/* Add Score Form */}
+      <AnimatePresence>
+        {isAddingScore && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mb-4 p-4 sm:p-6 border-2 border-yellow-200 rounded-2xl bg-gradient-to-br from-yellow-50/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
+              <div className="flex flex-col md:flex-row gap-4 md:items-end">
+                <div className="flex-1 space-y-2">
+                  <label className="text-sm font-semibold text-stone-700">Student Enrollment</label>
+                  <Select
+                    value={newScoreEnrollment}
+                    onValueChange={(value) => setNewScoreEnrollment(value)}
+                  >
+                    <SelectTrigger className="w-full border-2 border-yellow-200 bg-white px-3 py-2 h-auto rounded-lg text-sm text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-yellow-200/50">
+                      <SelectValue placeholder="Select Student" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-yellow-50 border-2 border-yellow-200">
+                      {cachedStudentsData.map((stu) => (
+                        <SelectItem 
+                          key={stu.enrollment_no} 
+                          value={stu.enrollment_no}
+                          className="focus:bg-amber-200 focus:text-amber-900 cursor-pointer"
+                        >
+                          {stu.student_name} ({stu.enrollment_no})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="w-full md:w-32 space-y-2">
+                  <label className="text-sm font-semibold text-stone-700">Points</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newScorePoints}
+                    onChange={(e) => setNewScorePoints(Number(e.target.value))}
+                    className="w-full border-2 border-yellow-200 bg-white px-3 py-2 rounded-lg text-sm text-stone-700 font-medium focus:outline-none focus:border-stone-700 focus:ring-2 focus:ring-yellow-200/50"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddScore}
+                    className="px-4 py-2 bg-teal-800 text-white rounded-full text-sm font-semibold hover:bg-teal-900 transition-colors shadow-sm"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setIsAddingScore(false)}
+                    className="px-4 py-2 bg-stone-100 text-stone-600 rounded-full text-sm font-semibold hover:bg-stone-200 transition-colors border border-stone-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
 
       {/* Leaderboard */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card rounded-2xl overflow-hidden"
+        className="flex gap-6 items-start"
       >
-        <div className="p-5 border-b border-border">
-          <h2 className="section-title flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-primary" /> Scores
-            {selectedMonth && ` - ${selectedMonth}`}
-          </h2>
-        </div>
-        <div className="divide-y divide-border/50">
-          {loading ? (
-            <div className="p-6 text-center text-muted-foreground">Loading scores...</div>
-          ) : fetchError ? (
-            <div className="p-6 text-center text-destructive text-sm">{fetchError}</div>
-          ) : scores.length === 0 ? (
-            <div className="p-6 text-center text-muted-foreground text-sm">No scores found for this month.</div>
-          ) : (
-            <AnimatePresence>
-              {scores.map((student, i) => (
-                <motion.div
-                  key={`${student.enrollment_no}-${i}`}
-                  layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ layout: { duration: 0.3 } }}
-                  className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors"
-                >
-                  <span className="w-7 h-7 flex items-center justify-center rounded-lg bg-primary/8 text-xs font-bold text-primary shrink-0">
-                    {i + 1}
-                  </span>
-                  <StudentAvatar
-                    name={student.name}
-                    enrollmentNo={student.enrollment_no}
-                    photoUrl={student.photo_url}
-                    className="w-8 h-8 shrink-0"
-                    fallbackClassName="bg-primary/8 text-primary text-xs font-medium"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{student.name}</p>
-                    <p className="text-xs text-muted-foreground">{student.enrollment_no}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {editingId === student.id ? (
-                      <>
-                        <input
-                          type="number"
-                          min="0"
-                          value={editValue}
-                          onChange={(e) => setEditValue(Number(e.target.value))}
-                          className="w-16 border px-2 py-1 rounded text-sm"
-                          autoFocus
+        <div className="max-w-full flex-1">
+          <div className="glass-card rounded-2xl overflow-hidden">
+            <div className="px-5 py-2 border-b-2 border-yellow-200 bg-gradient-to-r from-yellow-100/40 to-stone-100/30">
+              <h2 className="flex items-center gap-2 text-xs font-bold text-stone-600 uppercase tracking-widest">
+                <Trophy className="w-3.5 h-3.5 text-amber-600" /> Scores
+                {selectedMonth && ` - ${selectedMonth}`}
+              </h2>
+            </div>
+            <div className="flex border-b border-yellow-100/50 bg-yellow-50/50 px-5 py-1.5 gap-8">
+              <span className="flex-1 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Student</span>
+              <span className="w-20 text-center text-[10px] font-bold text-stone-500 uppercase tracking-wider">Marks</span>
+              {canEdit && <span className="w-16 text-center text-[10px] font-bold text-stone-500 uppercase tracking-wider">Edit</span>}
+            </div>
+            <div className="divide-y divide-yellow-100/50">
+              {loading ? (
+                <div className="p-6 text-center text-muted-foreground">Loading scores...</div>
+              ) : fetchError ? (
+                <div className="p-6 text-center text-destructive text-sm">{fetchError}</div>
+              ) : scores.length === 0 ? (
+                <div className="p-6 text-center text-muted-foreground text-sm">No scores found for this month.</div>
+              ) : (
+                <>
+                  <AnimatePresence mode="popLayout">
+                    {scores.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((student, i) => (
+                      <motion.div
+                        key={`${student.enrollment_no}-${i}`}
+                        layout
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ layout: { duration: 0.3 } }}
+                        className={`flex items-center gap-8 px-5 py-1.5 border-b border-yellow-100/50 hover:bg-green-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-yellow-100/30'}`}
+                      >
+                        <StudentAvatar
+                          name={student.name}
+                          enrollmentNo={student.enrollment_no}
+                          photoUrl={student.photo_url}
+                          className="w-8 h-8 shrink-0 ml-1"
+                          fallbackClassName="bg-yellow-100 text-amber-800 text-[10px] font-medium"
                         />
-                        <button
-                          onClick={() => handleUpdateScore(student.id, editValue)}
-                          className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <motion.span
-                          key={student.points}
-                          initial={{ scale: 1.15, color: "hsl(var(--primary))" }}
-                          animate={{ scale: 1, color: "hsl(var(--foreground))" }}
-                          transition={{ duration: 0.2 }}
-                          className="font-mono text-sm font-bold w-12 text-center"
-                        >
-                          {student.points}
-                        </motion.span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-stone-800">{student.name}</p>
+                          <p className="text-xs text-stone-600">{student.enrollment_no}</p>
+                        </div>
+
+                        <div className="w-20 flex justify-center">
+                          {editingId === student.id ? (
+                            <input
+                              type="number"
+                              min="0"
+                              value={editValue}
+                              onChange={(e) => setEditValue(Number(e.target.value))}
+                              className="w-16 border-2 border-amber-200 px-1 py-0.5 rounded text-xs text-center font-bold focus:outline-none focus:border-amber-500"
+                              autoFocus
+                            />
+                          ) : (
+                            <motion.span
+                              key={student.points}
+                              initial={{ scale: 1.15, color: "hsl(var(--primary))" }}
+                              animate={{ scale: 1, color: "hsl(var(--foreground))" }}
+                              transition={{ duration: 0.2 }}
+                              className="font-mono text-sm font-bold text-stone-800 bg-amber-50 px-2 py-0.5 rounded"
+                            >
+                              {student.points}
+                            </motion.span>
+                          )}
+                        </div>
+
                         {canEdit && (
-                          <button
-                            onClick={() => {
-                              setEditingId(student.id);
-                              setEditValue(student.points);
-                            }}
-                            className="p-1 text-muted-foreground hover:text-primary hover:bg-primary/8 rounded transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          <div className="w-16 flex justify-center gap-1">
+                            {editingId === student.id ? (
+                              <>
+                                <button
+                                  onClick={() => handleUpdateScore(student.id, editValue)}
+                                  className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                  title="Save"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                  title="Cancel"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setEditingId(student.id);
+                                  setEditValue(student.points);
+                                }}
+                                className="p-1 text-muted-foreground hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         )}
-                      </>
-                    )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  {/* Footer with Pagination and Add Score */}
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-yellow-200/20 bg-yellow-100/15">
+                    <div className="text-sm text-muted-foreground hidden sm:block">
+                      Showing {Math.min((currentPage - 1) * itemsPerPage + 1, scores.length)}-{Math.min(currentPage * itemsPerPage, scores.length)} of {scores.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        ←
+                      </button>
+                      {Array.from({ length: Math.ceil(scores.length / itemsPerPage) }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-2 py-1 rounded text-sm ${currentPage === page
+                              ? 'bg-amber-600 text-white font-bold'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-yellow-200/30'
+                            }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(scores.length / itemsPerPage), p + 1))}
+                        disabled={currentPage === Math.ceil(scores.length / itemsPerPage)}
+                        className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        →
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground hidden md:block">
+                        Page {currentPage} of {Math.ceil(scores.length / itemsPerPage)}
+                      </div>
+                    </div>
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
+        <div className="hidden lg:flex flex-col items-end justify-center pt-24 pr-12 flex-[0.3]">
+          <img src="/Score1.jpg" alt="Scores" className="max-w-sm rounded-lg shadow-[0_0_40px_rgba(217,169,102,0.8)] border-4 border-amber-200" />        </div>
       </motion.div>
     </div>
   );
