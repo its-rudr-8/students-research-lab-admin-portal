@@ -268,11 +268,11 @@
   }
 
   th {
-    @apply px-2 sm:px-3 py-2 text-left font-semibold text-foreground/80;
+    @apply px-1 sm:px-2 py-2 text-left font-semibold text-foreground/80;
   }
 
   td {
-    @apply px-2 sm:px-3 py-2;
+    @apply px-1 sm:px-2 py-2;
   }
 
   /* Ensure editable controls always show text cursor */
