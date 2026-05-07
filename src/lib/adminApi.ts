@@ -245,6 +245,27 @@ export const adminAPI = {
     return apiCall(`/admin/research-projects/${id}`, "DELETE");
   },
 
+  // Publication APIs
+  async getPublications() {
+    return apiCall("/admin/publication");
+  },
+
+  async getPublication(id: string) {
+    return apiCall(`/admin/publication/${id}`);
+  },
+
+  async createPublication(data: any) {
+    return apiCall("/admin/publication", "POST", data);
+  },
+
+  async updatePublication(id: string, data: any) {
+    return apiCall(`/admin/publication/${id}`, "PUT", data);
+  },
+
+  async deletePublication(id: string) {
+    return apiCall(`/admin/publication/${id}`, "DELETE");
+  },
+
   // Join Requests APIs
   async getJoinRequests() {
     return apiCall("/admin/join-requests");

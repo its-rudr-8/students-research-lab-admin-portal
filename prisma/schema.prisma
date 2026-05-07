@@ -131,7 +131,7 @@ model paper_authors {
   research_papers research_papers @relation(fields: [paper_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
-model publications {
+model publication {
   id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   serial_no       Int?     @unique
   student_authors String
@@ -152,10 +152,10 @@ model publications {
   enrollment_nos  String?
   year            Int?
 
-  @@unique([title, venue], map: "publications_title_venue_unique")
-  @@index([category], map: "idx_publications_category")
-  @@index([title], map: "idx_publications_title")
-  @@index([year], map: "idx_publications_year")
+  @@unique([title, venue], map: "publication_title_venue_unique")
+  @@index([category], map: "idx_publication_category")
+  @@index([title], map: "idx_publication_title")
+  @@index([year], map: "idx_publication_year")
 }
 
 model research_papers {
