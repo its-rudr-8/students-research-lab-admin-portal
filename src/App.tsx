@@ -8,6 +8,7 @@ import AdminLayout from "@/components/AdminLayout";
 import Dashboard from "@/pages/Dashboard";
 import Students from "@/pages/Students";
 import Research from "@/pages/Research";
+import Publications from "@/pages/Publications";
 import Attendance from "@/pages/Attendance";
 import Scores from "@/pages/Scores";
 import Activities from "@/pages/Activities";
@@ -126,6 +127,14 @@ const App = () => {
                   element={
                     <AdminOnlyRoute>
                       <Research />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="/publications"
+                  element={
+                    <AdminOnlyRoute>
+                      <Publications />
                     </AdminOnlyRoute>
                   }
                 />
