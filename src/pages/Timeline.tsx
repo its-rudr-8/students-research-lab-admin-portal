@@ -560,7 +560,7 @@ export default function Timeline() {
           <p className="text-muted-foreground font-medium">No timeline entries found.</p>
         </div>
       ) : (
-        <div className="relative max-w-[1400px] mx-auto px-4 pb-20">
+        <div className="relative max-w-[1500px] mx-auto px-4 pb-20">
           <div className="bg-[#FAF7F2]/80 backdrop-blur-xl rounded-[40px] sm:rounded-[60px] border-2 border-[#EAD8C0]/50 shadow-2xl overflow-hidden relative group transition-all duration-500 hover:shadow-[#EAD8C0]/20">
             <div className="max-h-[820px] overflow-y-auto overflow-x-hidden p-6 sm:p-16 relative scroll-smooth 
               [&::-webkit-scrollbar]:w-2
