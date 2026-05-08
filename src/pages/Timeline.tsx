@@ -570,6 +570,9 @@ export default function Timeline() {
               hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]
               transition-all">
               <div className="space-y-0 relative min-h-full">
+                {/* Vertical Line for Mobile */}
+                <div className="sm:hidden absolute left-1/2 -translate-x-1/2 top-[50px] bottom-[50px] w-1 bg-[#EAD8C0] opacity-40 rounded-full" />
+                
                 {entries.map((entry, i) => {
                   const isEven = i % 2 === 0;
                   const colors = [
@@ -616,7 +619,7 @@ export default function Timeline() {
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.4, delay: i * 0.05 }}
-                        className="grid grid-cols-1 sm:grid-cols-12 items-center gap-4 sm:gap-0 mb-12 sm:mb-16"
+                        className="flex flex-col sm:grid sm:grid-cols-12 items-center gap-4 sm:gap-0 mb-6 sm:mb-16"
                       >
                         {isEven ? (
                           <>
@@ -679,6 +682,19 @@ export default function Timeline() {
                           </>
                         ) : (
                           <>
+                            <div className="sm:hidden flex justify-center z-10 w-full">
+                              <motion.div 
+                                whileHover={{ scale: 1.1 }}
+                                className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white shadow-xl flex items-center justify-center border-4 ${color.border} relative`}
+                              >
+                                <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full ${color.light} flex items-center justify-center text-xl font-black ${color.text}`}>
+                                  {entry.serial_no}
+                                </div>
+                                <div className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-full ${color.primary} text-white flex items-center justify-center shadow-md border-2 border-white`}>
+                                  <Plus className="w-4 h-4" />
+                                </div>
+                              </motion.div>
+                            </div>
                             <div className="sm:col-span-1" />
                             <div className="sm:col-span-8">
                               <motion.div 
@@ -722,7 +738,7 @@ export default function Timeline() {
                               </motion.div>
                             </div>
                             <div className="hidden sm:block sm:col-span-1 h-1 bg-muted/20" />
-                            <div className="sm:col-span-2 flex justify-center z-10">
+                            <div className="hidden sm:flex sm:col-span-2 justify-center z-10">
                               <motion.div 
                                 whileHover={{ scale: 1.1 }}
                                 className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white shadow-xl flex items-center justify-center border-4 ${color.border} relative`}

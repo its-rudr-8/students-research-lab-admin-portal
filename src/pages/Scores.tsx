@@ -424,10 +424,10 @@ export default function Scores() {
                 {selectedMonth && ` - ${selectedMonth}`}
               </h2>
             </div>
-            <div className="flex border-b border-[#EAD8C0]/30 bg-[#FAF7F2]/50 px-5 py-1.5 gap-8">
+            <div className="flex border-b border-[#EAD8C0]/30 bg-[#FAF7F2]/50 px-3 sm:px-5 py-2 gap-3 sm:gap-8">
               <span className="flex-1 text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Student</span>
-              <span className="w-20 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Marks</span>
-              {canEdit && <span className="w-16 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Edit</span>}
+              <span className="w-14 sm:w-20 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Marks</span>
+              {canEdit && <span className="w-12 sm:w-16 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Edit</span>}
             </div>
             <div className="divide-y divide-yellow-100/50">
               {loading ? (
@@ -447,21 +447,21 @@ export default function Scores() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ layout: { duration: 0.3 } }}
-                        className={`flex items-center gap-8 px-5 py-1.5 border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}
+                        className={`flex items-center gap-3 sm:gap-8 px-3 sm:px-5 py-2 border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}
                       >
                         <StudentAvatar
                           name={student.name}
                           enrollmentNo={student.enrollment_no}
                           photoUrl={student.photo_url}
-                          className="w-8 h-8 shrink-0 ml-1"
+                          className="w-7 h-7 sm:w-8 sm:h-8 shrink-0"
                           fallbackClassName="bg-[#EAD8C0]/30 text-[#8B735B] text-[10px] font-medium"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-[#8B735B]">{student.name}</p>
-                          <p className="text-xs text-[#8B735B]/70">{student.enrollment_no}</p>
+                          <p className="text-xs sm:text-sm font-bold text-[#8B735B] truncate sm:whitespace-normal">{student.name}</p>
+                          <p className="text-[10px] sm:text-xs text-[#8B735B]/70 truncate">{student.enrollment_no}</p>
                         </div>
 
-                        <div className="w-20 flex justify-center">
+                        <div className="w-14 sm:w-20 flex justify-center">
                           {editingId === student.id ? (
                             <input
                               type="number"
@@ -485,7 +485,7 @@ export default function Scores() {
                         </div>
 
                         {canEdit && (
-                          <div className="w-16 flex justify-center gap-1">
+                          <div className="w-12 sm:w-16 flex justify-center gap-1">
                             {editingId === student.id ? (
                               <>
                                 <button
