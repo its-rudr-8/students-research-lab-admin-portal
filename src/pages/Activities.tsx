@@ -268,10 +268,10 @@ export default function Activities() {
                 <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Activity</span><span className="sm:hidden">Add</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="rounded-3xl sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl
-              [&::-webkit-scrollbar]:w-2
+            <DialogContent className="rounded-[32px] max-w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl p-4 sm:p-6
+              [&::-webkit-scrollbar]:w-1.5
               [&::-webkit-scrollbar-track]:bg-transparent
-              [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+              [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]/60
               [&::-webkit-scrollbar-thumb]:rounded-full
               hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]">
               <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Add Activity / Event</DialogTitle></DialogHeader>
@@ -372,10 +372,10 @@ export default function Activities() {
             }
           }}
         >
-          <DialogContent className="rounded-3xl sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl
-            [&::-webkit-scrollbar]:w-2
+          <DialogContent className="rounded-[32px] max-w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl p-4 sm:p-6
+            [&::-webkit-scrollbar]:w-1.5
             [&::-webkit-scrollbar-track]:bg-transparent
-            [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+            [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]/60
             [&::-webkit-scrollbar-thumb]:rounded-full
             hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]">
             <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Edit Activity / Event</DialogTitle></DialogHeader>

@@ -342,8 +342,8 @@ export default function Attendance() {
           </SelectContent>
         </Select>
       </motion.div>
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex gap-6">
-        <div className="max-w-3xl flex-1">
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col lg:flex-row gap-6">
+        <div className="w-full lg:max-w-3xl flex-1">
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               {loading ? (
@@ -437,7 +437,7 @@ export default function Attendance() {
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-start pt-20 pr-10">
+        <div className="hidden lg:flex flex-col items-center justify-start pt-20 pr-10">
           <img src="/Attendance.jpg" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />
         </div>
       </motion.div>

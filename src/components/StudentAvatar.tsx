@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface StudentAvatarProps {
@@ -43,7 +43,8 @@ export default function StudentAvatar({
   photoUrl,
   className,
   fallbackClassName,
-}: StudentAvatarProps) {
+  style,
+}: StudentAvatarProps & { style?: React.CSSProperties }) {
   const imageCandidates = useMemo(() => {
     const candidates: string[] = [];
 
@@ -75,7 +76,7 @@ export default function StudentAvatar({
   const currentSrc = imageCandidates[candidateIndex];
 
   return (
-    <Avatar className={className}>
+    <Avatar className={className} style={style}>
       {currentSrc ? (
         <AvatarImage
           src={currentSrc}

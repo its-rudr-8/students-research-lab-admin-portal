@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Calendar, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Calendar, Loader2, Pencil, Plus, Trash2, Award, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminAPI } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
+import { cn } from "@/lib/utils";
 
 interface Achievement {
   id: number;
@@ -18,10 +19,8 @@ interface Achievement {
   description?: string;
   achievement_date?: string;
   category?: string;
-  type?: string;
   linkedin_url?: string;
   image_url?: string;
-  media_urls?: string[];
   created_at?: string;
 }
 
@@ -62,7 +61,7 @@ export default function Achievements() {
       const response = await adminAPI.getAchievements();
 
       if (response.success && Array.isArray(response.data)) {
-        const sorted = response.data.sort((a: any, b: any) => 
+        const sorted = response.data.sort((a: any, b: any) =>
           (a.serial_no || 0) - (b.serial_no || 0)
         );
         setAchievements(sorted as Achievement[]);
@@ -82,14 +81,7 @@ export default function Achievements() {
   };
 
   const handleAddAchievement = async () => {
-    if (!canEdit) {
-      toast({
-        variant: "destructive",
-        title: "Read-only access",
-        description: "Only admin can add achievements.",
-      });
-      return;
-    }
+    if (!canEdit) return;
 
     if (!formData.title.trim()) {
       toast({
@@ -112,10 +104,7 @@ export default function Achievements() {
       });
 
       if (response.success) {
-        toast({
-          title: "Achievement added",
-        });
-
+        toast({ title: "Achievement added" });
         setOpen(false);
         setFormData({
           title: "",
@@ -139,22 +128,13 @@ export default function Achievements() {
   };
 
   const handleDeleteAchievement = async (id: number) => {
-    if (!canEdit) {
-      toast({
-        variant: "destructive",
-        title: "Read-only access",
-        description: "Only admin can delete achievements.",
-      });
-      return;
-    }
+    if (!canEdit) return;
+    if (!confirm("Are you sure you want to delete this achievement?")) return;
 
     try {
       const response = await adminAPI.deleteAchievement(String(id));
-      
       if (response.success) {
-        toast({
-          title: "Achievement deleted",
-        });
+        toast({ title: "Achievement deleted" });
         fetchAchievements();
       }
     } catch (error: any) {
@@ -167,15 +147,6 @@ export default function Achievements() {
   };
 
   const handleStartEdit = (achievement: Achievement) => {
-    if (!canEdit) {
-      toast({
-        variant: "destructive",
-        title: "Read-only access",
-        description: "Only admin can edit achievements.",
-      });
-      return;
-    }
-
     setEditingAchievement(achievement);
     setEditFormData({
       title: achievement.title || "",
@@ -189,25 +160,7 @@ export default function Achievements() {
   };
 
   const handleUpdateAchievement = async () => {
-    if (!canEdit) {
-      toast({
-        variant: "destructive",
-        title: "Read-only access",
-        description: "Only admin can edit achievements.",
-      });
-      return;
-    }
-
-    if (!editingAchievement) return;
-
-    if (!editFormData.title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing required fields",
-        description: "Title is required.",
-      });
-      return;
-    }
+    if (!editingAchievement || !canEdit) return;
 
     try {
       setEditSubmitting(true);
@@ -221,12 +174,8 @@ export default function Achievements() {
       });
 
       if (response.success) {
-        toast({
-          title: "Achievement updated",
-        });
-
+        toast({ title: "Achievement updated" });
         setEditOpen(false);
-        setEditingAchievement(null);
         fetchAchievements();
       }
     } catch (error: any) {
@@ -240,243 +189,233 @@ export default function Achievements() {
     }
   };
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return "N/A";
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#8B735B]" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5 max-w-4xl">
-      {canEdit && (
-        <div className="flex justify-start sm:justify-end">
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="rounded-xl gap-1.5 text-sm sm:text-base">
-                <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Achievement</span><span className="sm:hidden">Add</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="rounded-2xl sm:max-w-md max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add Achievement</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-1.5">
-                  <Label>Title *</Label>
-                  <Input
-                    placeholder="e.g., Won Best Research Paper"
-                    className="rounded-xl"
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Description</Label>
-                  <Textarea
-                    placeholder="Achievement description..."
-                    className="rounded-xl resize-none"
-                    rows={3}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Achievement Date</Label>
-                  <Input
-                    type="date"
-                    className="rounded-xl"
-                    value={formData.achievement_date}
-                    onChange={(e) => setFormData({ ...formData, achievement_date: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Category</Label>
-                  <Input
-                    placeholder="e.g., Award, Certificate, Recognition"
-                    className="rounded-xl"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  />
-                </div>
-                <ImageUpload
-                  label="Achievement Image"
-                  onImageUpload={(url) => setFormData({ ...formData, image_url: url })}
-                  currentImage={formData.image_url}
-                />
-                <div className="space-y-1.5">
-                  <Label>LinkedIn URL</Label>
-                  <Input
-                    placeholder="https://linkedin.com/..."
-                    className="rounded-xl"
-                    value={formData.linkedin_url}
-                    onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)} disabled={submitting}>
-                    Cancel
+    <div className="min-h-full">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col lg:flex-row gap-8 items-start"
+      >
+        <div className="flex-1 w-full space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#EAD8C0]/20 to-transparent p-4 rounded-2xl border border-[#EAD8C0]/30">
+            <div>
+              <h1 className="text-xl font-bold text-[#8B735B] flex items-center gap-2">
+                <Award className="w-6 h-6 text-orange-500" />
+                Lab Achievements
+              </h1>
+              <p className="text-xs text-[#8B735B]/70 font-medium uppercase tracking-wider mt-1">Celebrating our milestones and success</p>
+            </div>
+            {canEdit && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-teal-700 hover:bg-teal-800 text-white rounded-xl gap-2 font-bold shadow-md">
+                    <Plus className="w-4 h-4" /> Add New
                   </Button>
-                  <Button className="rounded-xl" onClick={handleAddAchievement} disabled={submitting}>
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      "Add"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
+                </DialogTrigger>
+                <DialogContent className="rounded-[32px] max-w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl p-4 sm:p-6">
+                  <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Add Achievement</DialogTitle></DialogHeader>
+                  <div className="space-y-4 pt-2">
+                    <div className="grid gap-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-[#8B735B] font-bold">Title *</Label>
+                        <Input placeholder="Achievement title" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-[#8B735B] font-bold">Category</Label>
+                          <Input placeholder="e.g. Award" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[#8B735B] font-bold">Date</Label>
+                          <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.achievement_date} onChange={(e) => setFormData({ ...formData, achievement_date: e.target.value })} />
+                        </div>
+                      </div>
+                      <ImageUpload label="Achievement Photo" onImageUpload={(url) => setFormData({ ...formData, image_url: url })} currentImage={formData.image_url} />
+                      <div className="space-y-1.5">
+                        <Label className="text-[#8B735B] font-bold">Description</Label>
+                        <Textarea placeholder="Details..." className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white" rows={3} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[#8B735B] font-bold">LinkedIn Link</Label>
+                        <Input placeholder="https://..." className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.linkedin_url} onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })} />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button variant="outline" className="rounded-xl border-[#EAD8C0]" onClick={() => setOpen(false)}>Cancel</Button>
+                      <Button className="rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold" onClick={handleAddAchievement} disabled={submitting}>
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create"}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
 
-      {canEdit && (
-        <Dialog
-          open={editOpen}
-          onOpenChange={(isOpen) => {
-            setEditOpen(isOpen);
-            if (!isOpen) {
-              setEditingAchievement(null);
-            }
-          }}
-        >
-          <DialogContent className="rounded-2xl sm:max-w-md max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Achievement</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <Label>Title *</Label>
-                <Input
-                  placeholder="e.g., Won Best Research Paper"
-                  className="rounded-xl"
-                  value={editFormData.title}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Description</Label>
-                <Textarea
-                  placeholder="Achievement description..."
-                  className="rounded-xl resize-none"
-                  rows={3}
-                  value={editFormData.description}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Achievement Date</Label>
-                <Input
-                  type="date"
-                  className="rounded-xl"
-                  value={editFormData.achievement_date}
-                  onChange={(e) => setEditFormData({ ...editFormData, achievement_date: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <Input
-                  placeholder="e.g., Award, Certificate, Recognition"
-                  className="rounded-xl"
-                  value={editFormData.category}
-                  onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                />
-              </div>
-              <ImageUpload
-                label="Achievement Image"
-                onImageUpload={(url) => setEditFormData({ ...editFormData, image_url: url })}
-                currentImage={editFormData.image_url}
-              />
-              <div className="space-y-1.5">
-                <Label>LinkedIn URL</Label>
-                <Input
-                  placeholder="https://linkedin.com/..."
-                  className="rounded-xl"
-                  value={editFormData.linkedin_url}
-                  onChange={(e) => setEditFormData({ ...editFormData, linkedin_url: e.target.value })}
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" className="rounded-xl" onClick={() => setEditOpen(false)} disabled={editSubmitting}>
-                  Cancel
-                </Button>
-                <Button className="rounded-xl" onClick={handleUpdateAchievement} disabled={editSubmitting}>
-                  {editSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                      Updating...
-                    </>
+          <div className="glass-card rounded-2xl overflow-hidden border-[#EAD8C0]/50 shadow-xl bg-white/50">
+            <div className="px-5 py-3 border-b border-[#EAD8C0]/40 bg-[#FAF7F2]/80 flex justify-between items-center">
+              <span className="text-[10px] font-black text-[#8B735B]/60 uppercase tracking-[0.2em]">Recognition Dashboard</span>
+              <span className="text-[10px] font-bold text-[#8B735B]/40">{achievements.length} ENTRIES</span>
+            </div>
+
+            <div className={cn(
+              "overflow-y-auto pr-1 transition-all duration-300",
+              achievements.length > 5 ? "max-h-[620px]" : "max-h-none"
+            )}>
+              <div className="divide-y divide-[#EAD8C0]/20">
+                <AnimatePresence mode="popLayout">
+                  {achievements.length === 0 ? (
+                    <div className="p-12 text-center text-muted-foreground italic">No achievements recorded yet.</div>
                   ) : (
-                    "Update"
+                    achievements.map((achievement, i) => (
+                      <motion.div
+                        key={achievement.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className={cn(
+                          "group p-6 flex flex-col sm:flex-row gap-6 hover:bg-[#FAF7F2] transition-all duration-300 relative",
+                          i % 2 === 0 ? "bg-white/40" : "bg-[#FAF7F2]/10"
+                        )}
+                      >
+                        {/* Decorative separator line */}
+                        {i < achievements.length - 1 && (
+                          <div className="absolute bottom-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-[#EAD8C0]/60 to-transparent" />
+                        )}
+                        {achievement.image_url && !achievement.title.includes("8 Teams") && (
+                          <div className="w-full sm:w-24 h-24 rounded-xl overflow-hidden shadow-md border-2 border-white shrink-0">
+                            <img src={achievement.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200 uppercase tracking-tighter">
+                                  #{achievement.serial_no}
+                                </span>
+                                {achievement.category && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100 uppercase tracking-tighter">
+                                    {achievement.category}
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="text-base font-bold text-[#8B735B] mt-1.5 group-hover:text-teal-800 transition-colors">{achievement.title}</h3>
+                            </div>
+                            {canEdit && (
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-[#EAD8C0]/30" onClick={() => handleStartEdit(achievement)}>
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-red-50 text-red-500" onClick={() => handleDeleteAchievement(achievement.id)}>
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+
+                          <p className="text-xs sm:text-sm text-[#8B735B]/80 leading-relaxed italic">
+                            "{achievement.description || "Consistent excellence and research contribution."}"
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-4 pt-1">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#8B735B]/60">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {formatDate(achievement.achievement_date)}
+                            </div>
+                            {achievement.linkedin_url && (
+                              <a
+                                href={achievement.linkedin_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:underline bg-teal-50/50 px-2 py-0.5 rounded-lg border border-teal-100/50"
+                              >
+                                <ExternalLink className="w-3 h-3" /> LinkedIn
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))
                   )}
-                </Button>
+                </AnimatePresence>
               </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {!canEdit && <p className="text-xs text-muted-foreground">You have read-only access. Only admin can manage achievements.</p>}
-
-      {achievements.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">No achievements found. Add your first achievement.</div>
-      ) : (
-        <div className="relative">
-          <div className="absolute left-[19px] top-0 bottom-0 w-px bg-border" />
-          <div className="space-y-4">
-            {achievements.map((achievement, i) => (
-              <motion.div
-                key={achievement.id}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08, duration: 0.3 }}
-                className="relative pl-12"
-              >
-                <div className="absolute left-[14px] top-5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-background" />
-                <div className="glass-card rounded-2xl p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-primary">SN: {achievement.serial_no}</p>
-                      <h3 className="text-sm font-semibold text-foreground mt-1">{achievement.title}</h3>
-                      {achievement.category && (
-                        <p className="text-xs text-muted-foreground mt-1">Category: {achievement.category}</p>
-                      )}
-                      {achievement.description && (
-                        <p className="text-sm text-muted-foreground mt-2 leading-relaxed line-clamp-2">{achievement.description}</p>
-                      )}
-                    </div>
-                    {canEdit && (
-                      <div className="flex gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-lg"
-                          onClick={() => handleStartEdit(achievement)}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-lg text-destructive hover:text-destructive"
-                          onClick={() => handleDeleteAchievement(achievement.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
           </div>
         </div>
-      )}
+
+        <div className="hidden lg:flex flex-col items-center justify-start pt-52 pr-4 flex-[0.35]">
+          <div className="sticky top-44">
+            <img
+              src="/Achievement.jpg"
+              alt="Achievements"
+              className="max-w-[340px] rounded-[2rem] shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:rotate-1 transition-all duration-700"
+            />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Edit Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="rounded-[32px] max-w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl p-4 sm:p-6">
+          <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Edit Achievement</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-[#8B735B] font-bold">Title *</Label>
+                <Input placeholder="Achievement title" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.title} onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-[#8B735B] font-bold">Category</Label>
+                  <Input placeholder="e.g. Award" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.category} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[#8B735B] font-bold">Date</Label>
+                  <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.achievement_date} onChange={(e) => setEditFormData({ ...editFormData, achievement_date: e.target.value })} />
+                </div>
+              </div>
+              <ImageUpload label="Achievement Photo" onImageUpload={(url) => setEditFormData({ ...editFormData, image_url: url })} currentImage={editFormData.image_url} />
+              <div className="space-y-1.5">
+                <Label className="text-[#8B735B] font-bold">Description</Label>
+                <Textarea placeholder="Details..." className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white" rows={3} value={editFormData.description} onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[#8B735B] font-bold">LinkedIn Link</Label>
+                <Input placeholder="https://..." className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.linkedin_url} onChange={(e) => setEditFormData({ ...editFormData, linkedin_url: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" className="rounded-xl border-[#EAD8C0]" onClick={() => setEditOpen(false)}>Cancel</Button>
+              <Button className="rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold" onClick={handleUpdateAchievement} disabled={editSubmitting}>
+                {editSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

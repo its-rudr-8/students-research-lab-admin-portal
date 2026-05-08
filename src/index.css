@@ -59,6 +59,25 @@
     --shadow-elevated: 0 8px 30px -4px hsl(180 100% 15% / 0.18);
   }
 
+  /* Global Scrollbar Theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #EAD8C0;
+    border-radius: 20px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #8B735B;
+  }
+
   .dark {
     --background: 180 40% 8%;
     --foreground: 180 20% 95%;
