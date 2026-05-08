@@ -100,10 +100,26 @@ async function apiCall<T>(
   }
 }
 
-// ============ ADMIN STUDENTS ============
 export async function getStudents() {
-  const res = await apiCall<any>("/admin/students", "GET");
-  return res.data || [];
+  const [res, leaderboardRes] = await Promise.all([
+    apiCall<any>("/admin/students", "GET").catch(() => ({ data: [] })),
+    apiCall<any>("/leaderboard", "GET").catch(() => ({ leaderboard: [] }))
+  ]);
+
+  const data = res?.data || (Array.isArray(res) ? res : []);
+  const leaderboard = leaderboardRes?.leaderboard || (Array.isArray(leaderboardRes) ? leaderboardRes : []);
+  
+  const imageMap = new Map();
+  leaderboard.forEach((r: any) => {
+    if (r.enrollment_no && (r.photo || r.image || r.photo_url || r.photoUrl)) {
+      imageMap.set(r.enrollment_no, r.photo || r.image || r.photo_url || r.photoUrl);
+    }
+  });
+
+  return data.map((s: any) => ({
+    ...s,
+    photo_url: s.photo_url || s.image || s.photo || s.photoUrl || imageMap.get(s.enrollment_no)
+  }));
 }
 
 export async function getStudent(enrollmentNo: string) {
@@ -247,5 +263,9 @@ export async function getPublicPublications() {
 
 export async function getPublicResearchers() {
   const res = await apiCall<any>("/researchers", "GET");
-  return res.data || [];
+  const data = res.data || (Array.isArray(res) ? res : (res.researchers ? res.researchers : []));
+  return data.map((s: any) => ({
+    ...s,
+    photo_url: s.photo_url || s.image || s.photo || s.photoUrl
+  }));
 }

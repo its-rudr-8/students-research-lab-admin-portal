@@ -1,1149 +1,690 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Users, CalendarCheck, BookOpen, Trophy, TrendingUp, Loader2, Calendar, BarChart2, PieChart as PieIcon, Activity, Clock } from "lucide-react";
-import StatCard from "@/components/StatCard";
-import { useToast } from "@/hooks/use-toast";
-import { adminAPI } from "@/lib/adminApi";
+import { 
+  Users, 
+  Clock, 
+  CalendarCheck, 
+  Calendar, 
+  Award,
+  ChevronDown,
+  Star,
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  TrendingUp,
+  Target,
+  Trophy
+} from "lucide-react";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area, Cell, LabelList
 } from "recharts";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getStoredUser } from "@/lib/auth";
-import { Sparkles } from "lucide-react";
+import { adminAPI } from "@/lib/adminApi";
 
-interface ScoreBandEntry {
-  name: string;
-  value: number;
-  color: string;
-}
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-interface GenderChartEntry {
-  name: string;
-  value: number;
-  color: string;
-}
+function MonthNavigator({ 
+  selectedMonth, 
+  onMonthChange, 
+  selectedYear, 
+  setSelectedYear 
+}: { 
+  selectedMonth: string, 
+  onMonthChange: (m: string) => void, 
+  selectedYear: number, 
+  setSelectedYear: (y: number) => void 
+}) {
+  return (
+    <div className="bg-[#EAE1D2]/40 backdrop-blur-md border border-[#D4C9B6]/60 p-1 rounded-full shadow-sm flex items-center justify-between gap-1 w-full relative z-20 mb-2">
+      {/* Left: Year Navigator */}
+      <div className="flex items-center gap-1 shrink-0 px-2 sm:px-3">
+        <button onClick={() => setSelectedYear(selectedYear - 1)} className="p-1 hover:bg-[#D4C9B6]/40 rounded-full transition-colors text-[#8B8476] hover:text-[#21493A]">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-sm font-bold text-[#21493A] w-10 text-center">{selectedYear}</span>
+        <button onClick={() => setSelectedYear(selectedYear + 1)} className="p-1 hover:bg-[#D4C9B6]/40 rounded-full transition-colors text-[#8B8476] hover:text-[#21493A]">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
 
-interface LeaderboardEntry {
-  enrollment_no: string;
-  score: number;
-  name: string;
-}
+      {/* Center: All Months Row */}
+      <div className="flex-1 flex items-center justify-between gap-0.5 sm:gap-1 px-1 md:px-2">
+        {MONTHS.map(month => {
+          const isActive = selectedMonth === month;
+          return (
+            <button
+              key={month}
+              onClick={() => onMonthChange(month)}
+              className={`flex-1 px-1 sm:px-2 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold transition-all duration-300 text-center ${
+                isActive 
+                  ? "bg-[#1A3B2F] text-white shadow-md" 
+                  : "text-[#8B8476] hover:text-[#1A3B2F] hover:bg-[#D4C9B6]/30"
+              }`}
+            >
+              {month}
+            </button>
+          )
+        })}
+      </div>
 
-interface TopScoreChartEntry {
-  name: string;
-  score: number;
-}
-
-interface TopAttendanceChartEntry {
-  name: string;
-  hours: number;
-}
-
-interface MonthlyTrendEntry {
-  month: string;
-  score: number;
-  hours: number;
-}
-
-interface Activity {
-  id: number;
-  title: string;
-  date: string;
-  description?: string;
+      {/* Right: Dropdown Picker */}
+      <div className="shrink-0 pr-1">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="p-2 sm:p-2.5 bg-white/50 hover:bg-white border border-[#D4C9B6]/50 text-[#1A3B2F] rounded-full shadow-sm transition-colors">
+              <Calendar className="w-4 h-4 sm:w-4 sm:h-4" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-3 rounded-2xl bg-[#fdfdfc] border-[#D4C9B6] shadow-xl">
+             <div className="grid grid-cols-3 gap-2">
+               {MONTHS.map(month => (
+                 <button
+                   key={month}
+                   onClick={() => onMonthChange(month)}
+                   className={`py-2 text-sm font-semibold rounded-lg transition-colors ${
+                     selectedMonth === month 
+                       ? "bg-[#1A3B2F] text-white" 
+                       : "hover:bg-[#EAE1D2]/50 text-[#8B8476]"
+                   }`}
+                 >
+                   {month}
+                 </button>
+               ))}
+             </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    </div>
+  );
 }
 
 export default function Dashboard() {
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardPeriodLabel, setLeaderboardPeriodLabel] = useState<string>("Latest available month");
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activitiesLoading, setActivitiesLoading] = useState(true);
-  const [totalStudents, setTotalStudents] = useState<number>(0);
-  const [studentsCountLoading, setStudentsCountLoading] = useState(true);
-  const [attendancePercent, setAttendancePercent] = useState<number>(0);
-  const [attendanceSubtitle, setAttendanceSubtitle] = useState<string>("No attendance data");
-  const [attendanceLoading, setAttendanceLoading] = useState(true);
-  const [topScoreChart, setTopScoreChart] = useState<TopScoreChartEntry[]>([]);
-  const [topAttendanceChart, setTopAttendanceChart] = useState<TopAttendanceChartEntry[]>([]);
-  const [monthlyTrendChart, setMonthlyTrendChart] = useState<MonthlyTrendEntry[]>([]);
-  const [scoreBandChart, setScoreBandChart] = useState<ScoreBandEntry[]>([]);
-  const [avgScorePerStudent, setAvgScorePerStudent] = useState<number>(0);
-  const [avgHoursPerStudent, setAvgHoursPerStudent] = useState<number>(0);
-  const [highPerformersCount, setHighPerformersCount] = useState<number>(0);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
-  const [genderRawData, setGenderRawData] = useState<{ gender: string; semester: string }[]>([]);
-  const [genderSemesters, setGenderSemesters] = useState<string[]>([]);
-  const [selectedSemester, setSelectedSemester] = useState<string>("all");
-  const [genderLoading, setGenderLoading] = useState(true);
-  
-  // Student specific metrics
-  const [userMonthlyAttendance, setUserMonthlyAttendance] = useState<number>(0);
-  const [userMonthlyScore, setUserMonthlyScore] = useState<number>(0);
-  const [userTotalScore, setUserTotalScore] = useState<number>(0);
-  const [userMetricsLoading, setUserMetricsLoading] = useState(false);
-  const [welcomeName, setWelcomeName] = useState<string>("");
-
-  const { toast } = useToast();
   const user = getStoredUser();
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
+  const [selectedMonth, setSelectedMonth] = useState("May");
+  const [selectedYear, setSelectedYear] = useState(2026);
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Data States
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [hoursDedicated, setHoursDedicated] = useState(0);
+  const [sessionsConducted, setSessionsConducted] = useState(0);
+  const [academicLead, setAcademicLead] = useState<any>({ name: "Loading...", score: 0 });
+  const [topContributor, setTopContributor] = useState<any>({ name: "Loading...", hours: 0 });
+
+  const [cumulativeData, setCumulativeData] = useState<any[]>([]);
+  const [monthlyScores, setMonthlyScores] = useState<any[]>([]);
+  const [topScoreTrend, setTopScoreTrend] = useState<any[]>([]);
+  const [timeDedication, setTimeDedication] = useState<any[]>([]);
+  const [prevHoursDedicated, setPrevHoursDedicated] = useState(0);
 
   useEffect(() => {
-    // Load admin dashboards for admins AND members
-    fetchLeaderboard();
-    fetchActivities();
-    fetchTotalStudents();
-    fetchGenderData();
-    fetchPerformanceAnalytics();
-    
-    fetchWelcomeName();
-    
-    // Also load member-specific metrics for non-admins (to show personal stats)
-    if (user?.role !== 'admin' && user?.enrollmentNo) {
-      fetchUserSpecificMetrics();
-    }
-  }, [user?.email, user?.enrollmentNo, user?.role]);
+    const fetchData = async () => {
+      try {
+        const currentMonthIdx = MONTHS.indexOf(selectedMonth);
+        const apiMonth = currentMonthIdx + 1;
 
-  useEffect(() => {
-    if (user?.role === 'admin' && !studentsCountLoading) {
-      fetchAttendanceSummary();
-    }
-  }, [studentsCountLoading, totalStudents, user?.role]);
+        const [
+          studentsResponse, 
+          activitiesResponse, 
+          leaderboardResponse,
+          monthlyResponse
+        ] = await Promise.all([
+          adminAPI.getStudents().catch(() => ({ success: false, data: [] })),
+          adminAPI.getActivities().catch(() => ({ success: false, data: [] })),
+          adminAPI.getLeaderboard().catch(() => ({ leaderboard: [] })),
+          adminAPI.getMonthlyLeaderboard(apiMonth, selectedYear).catch(() => ({ leaderboard: [] }))
+        ]);
 
-  const fetchTotalStudents = async () => {
-    try {
-      setStudentsCountLoading(true);
-      const response = await adminAPI.getStudents();
-
-      if (response.success && Array.isArray(response.data)) {
-        const visibleStudents = response.data.filter(
-          (row: any) => String(row.member_type || "member").toLowerCase() !== "admin"
-        );
-        setTotalStudents(visibleStudents.length);
-      } else {
-        setTotalStudents(0);
-      }
-    } catch (error: any) {
-      console.error("Error fetching total students:", error);
-      setTotalStudents(0);
-    } finally {
-      setStudentsCountLoading(false);
-    }
-  };
-
-  const fetchAttendanceSummary = async () => {
-    try {
-      setAttendanceLoading(true);
-
-      const studentsResponse = await adminAPI.getStudents();
-
-      if (!studentsResponse.success || !Array.isArray(studentsResponse.data)) {
-        setAttendancePercent(0);
-        setAttendanceSubtitle("Attendance unavailable");
-        return;
-      }
-
-      const visibleEnrollmentSet = new Set(
-        studentsResponse.data
-          .filter((row: any) => String(row.member_type || "member").toLowerCase() !== "admin")
-          .map((row: any) => String(row.enrollment_no || "").trim())
-          .filter(Boolean)
-      );
-
-      // For now, show attendance as 0 since we don't have attendance data in the backend
-      const presentCount = 0;
-      const percent = 0;
-
-      setAttendancePercent(percent);
-      setAttendanceSubtitle(`Attendance data unavailable`);
-    } catch (error) {
-      console.error("Error fetching attendance summary:", error);
-      setAttendancePercent(0);
-      setAttendanceSubtitle("Attendance unavailable");
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
-
-  const fetchUserSpecificMetrics = async () => {
-    if (!user?.enrollmentNo) return;
-    try {
-      setUserMetricsLoading(true);
-      const enNo = String(user.enrollmentNo).trim().toLowerCase();
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
-
-      const cleanEnNo = enNo.replace(/[^a-z0-9]/g, '');
-
-      // 1. Fetch Scores from backend API
-      const scoresResponse = await adminAPI.getScores();
-
-      if (!scoresResponse.success) {
-        setUserTotalScore(0);
-        setUserMonthlyScore(0);
-        setUserMonthlyAttendance(0);
-        return;
-      }
-
-      const allScoresRaw = Array.isArray(scoresResponse.data?.leaderboardStats)
-        ? scoresResponse.data.leaderboardStats
-        : [];
-
-      const userScores = allScoresRaw.filter(s => {
-        const dbEnNoRaw = String(s.enrollment_no || s.enroll_no || s["enroll no."] || "").trim().toLowerCase();
-        const dbEnNoClean = dbEnNoRaw.replace(/[^a-z0-9]/g, '');
-        return dbEnNoClean === cleanEnNo || dbEnNoRaw === enNo;
-      });
-      
-      // Calculate Total Lifetime Score
-      const lifetime = userScores.reduce((sum, s) => {
-        // Use debate_score from backend schema
-        const val = s.debate_score || s.total_points || s.points || s.score || 0;
-        return sum + (typeof val === 'number' ? val : parseFloat(String(val)) || 0);
-      }, 0);
-      setUserTotalScore(lifetime);
-
-      // Calculate Monthly Score
-      // Backend period format: "2026-04" for April 2026
-      const monthly = userScores.filter(s => {
-        const periodStr = String(s.period || s.date || s.Date || "").trim();
-        if (!periodStr) return false;
+        let nameMap: Record<string, string> = {};
         
-        try {
-          // Check for period format "YYYY-MM" like "2026-04"
-          const monthPad = currentMonth < 10 ? `0${currentMonth}` : `${currentMonth}`;
-          const periodPattern = `${currentYear}-${monthPad}`;
+        // --- Process Students ---
+        if (studentsResponse.success && Array.isArray(studentsResponse.data)) {
+          const visibleStudents = studentsResponse.data.filter(
+            (student: any) => String(student.member_type || "member").toLowerCase() !== "admin"
+          );
+          setTotalStudents(visibleStudents.length);
           
-          if (periodStr.includes(periodPattern)) return true;
+          visibleStudents.forEach((student: any) => {
+            const en = String(student.enrollment_no || "").trim();
+            if (en) nameMap[en] = String(student.student_name || "").trim();
+          });
+        }
+        
+        // --- Process Sessions ---
+        if (activitiesResponse.success && Array.isArray(activitiesResponse.data)) {
+          setSessionsConducted(activitiesResponse.data.length);
+        }
 
-          // Also check for other date formats as fallback
-          if (periodStr.includes(`${monthPad}/${currentYear}`) || 
-              periodStr.includes(`${currentMonth}/${currentYear}`)) return true;
+        const formatName = (fullName: string) => fullName.split(" ").slice(0, 2).join(" ");
+        const isValidMember = (s: any) => String(s.role || s.member_type || "member").toLowerCase() !== "admin";
 
-          // Manual parts check for formats like "04-2026"
-          const parts = periodStr.split(/[\/\-\.]/);
-          if (parts.length >= 2) {
-             const m = parseInt(parts[0]);
-             const yStr = parts[parts.length-1];
-             const y = yStr.length === 2 ? 2000 + parseInt(yStr) : parseInt(yStr);
-             if (m === currentMonth && y === currentYear) return true;
+        // --- Process Cumulative Leaderboard (Graph 1) ---
+        if (leaderboardResponse && Array.isArray(leaderboardResponse.leaderboard)) {
+          const formattedCumulative = leaderboardResponse.leaderboard
+            .filter(isValidMember)
+            .slice(0, 5)
+            .map((s: any) => {
+              const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
+              return { 
+                name: formatName(fullName), 
+                score: Math.round(Number(s.debate_score || s.points || s.total_score || 0)), 
+                originalName: fullName,
+                image: s.image || s.photo_url || s.photoUrl || s.photo
+              };
+            });
+          setCumulativeData(formattedCumulative);
+        }
+
+        // --- Process Monthly Leaderboard (Graph 2 & Academic Lead MVP) ---
+        if (monthlyResponse && Array.isArray(monthlyResponse.leaderboard)) {
+          const formattedMonthly = monthlyResponse.leaderboard
+            .filter(isValidMember)
+            .slice(0, 5)
+            .map((s: any) => {
+              const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
+              return { 
+                name: formatName(fullName), 
+                score: Math.round(Number(s.debate_score || s.points || s.total_score || s.monthly_score || 0)), 
+                originalName: fullName,
+                image: s.image || s.photo_url || s.photoUrl || s.photo
+              };
+            });
+            
+          if (formattedMonthly.length > 0) {
+            setMonthlyScores(formattedMonthly);
+            setAcademicLead(formattedMonthly[0]);
+          } else {
+            setAcademicLead({ name: "No Data", score: 0 });
+            setMonthlyScores([]);
           }
-          
-          // Try parsing as full date
-          const d = new Date(periodStr);
-          return !isNaN(d.getTime()) && (d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear);
-        } catch { return false; }
-      }).reduce((sum, s) => {
-        // Use debate_score from backend schema
-        const val = s.debate_score || s.total_points || s.points || s.score || 0;
-        return sum + (typeof val === 'number' ? val : parseFloat(String(val)) || 0);
-      }, 0);
-      
-      setUserMonthlyScore(monthly);
-
-      // For now, set attendance to 0 since we don't have attendance data in the backend
-      setUserMonthlyAttendance(0);
-
-      console.log("METRIC_TRACE:", {
-        enNo,
-        cleanEnNo,
-        scoresFound: allScoresRaw.length,
-        userScoresFound: userScores.length,
-        lifetime
-      });
-
-    } catch (error) {
-      console.error("Error fetching student metrics:", error);
-      setUserTotalScore(0);
-      setUserMonthlyScore(0);
-      setUserMonthlyAttendance(0);
-    } finally {
-      setUserMetricsLoading(false);
-    }
-  };
-
-  const fetchWelcomeName = async () => {
-    if (user?.role === "admin") {
-      setWelcomeName("Admin");
-      return;
-    }
-
-    // For members, use the name from stored user object
-    if (user?.name) {
-      setWelcomeName(String(user.name).trim());
-      return;
-    }
-
-    setWelcomeName("");
-  };
-
-  const fetchLeaderboard = async () => {
-    try {
-      setLoading(true);
-
-      const [scoresResponse, studentsResponse] = await Promise.all([
-        adminAPI.getScores(),
-        adminAPI.getStudents()
-      ]);
-
-      if (!scoresResponse.success || !studentsResponse.success) {
-        setLeaderboard([]);
-        setLoading(false);
-        return;
-      }
-
-      const scoresData = Array.isArray(scoresResponse.data?.leaderboardStats)
-        ? scoresResponse.data.leaderboardStats
-        : [];
-      const availableMonths = Array.isArray(scoresResponse.data?.availableMonths)
-        ? scoresResponse.data.availableMonths
-        : [];
-      const studentsData = Array.isArray(studentsResponse.data) ? studentsResponse.data : [];
-
-      const visibleStudents = studentsData.filter(
-        (student: any) => String(student.member_type || "member").toLowerCase() !== "admin"
-      );
-
-      const visibleEnrollmentSet = new Set(
-        visibleStudents.map((student: any) => String(student.enrollment_no || "").trim()).filter(Boolean)
-      );
-
-      const nameMap: Record<string, string> = {};
-      visibleStudents.forEach((student: any) => {
-        const en = String(student.enrollment_no || "").trim();
-        if (!en) return;
-        nameMap[en] = String(student.student_name || "").trim();
-      });
-
-      // Pick latest period that actually has leaderboard rows for visible students.
-      let selectedPeriod = "";
-      let selectedPeriodLabel = "Latest available month";
-
-      const formatPeriodAsMonthLabel = (period: string) => {
-        const normalized = String(period || "").trim();
-        const match = normalized.match(/^(\d{4})-(\d{2})$/);
-        if (!match) return normalized;
-
-        const year = Number(match[1]);
-        const month = Number(match[2]);
-        if (month < 1 || month > 12) return normalized;
-
-        return new Date(year, month - 1, 1).toLocaleDateString("en-US", {
-          month: "short",
-          year: "numeric",
-        });
-      };
-
-      const getPeriodRank = (period: string) => {
-        const normalized = String(period || "").trim();
-        const ym = normalized.match(/^(\d{4})-(\d{2})$/);
-        if (ym) {
-          const y = Number(ym[1]);
-          const m = Number(ym[2]);
-          if (m >= 1 && m <= 12) return y * 12 + m;
+        } else {
+            setAcademicLead({ name: "No Data", score: 0 });
+            setMonthlyScores([]);
         }
 
-        const parsed = new Date(`1 ${normalized}`);
-        if (!Number.isNaN(parsed.getTime())) {
-          return parsed.getFullYear() * 12 + (parsed.getMonth() + 1);
+        // --- Fetch 6-Month Trend for Graph 2 ---
+        const trendPromises = [];
+        const trendLabels: string[] = [];
+        for (let i = 5; i >= 0; i--) {
+          let m = currentMonthIdx - i;
+          let y = selectedYear;
+          if (m < 0) { m += 12; y -= 1; }
+          trendLabels.push(`${MONTHS[m]} ${y}`);
+          trendPromises.push(adminAPI.getMonthlyLeaderboard(m + 1, y).catch(() => ({ leaderboard: [] })));
         }
-
-        return -1;
-      };
-
-      const candidatePeriods = Array.from(
-        new Set(scoresData.map((row: any) => String(row.period || "").trim()).filter(Boolean))
-      );
-      candidatePeriods.sort((a, b) => {
-        const diff = getPeriodRank(b) - getPeriodRank(a);
-        return diff !== 0 ? diff : b.localeCompare(a);
-      });
-
-      selectedPeriod = candidatePeriods[0] || "";
-
-      const monthLabelByValue = new Map(
-        availableMonths.map((m: any) => [String(m?.value || "").trim(), String(m?.label || "").trim()])
-      );
-
-      selectedPeriodLabel =
-        monthLabelByValue.get(selectedPeriod) || formatPeriodAsMonthLabel(selectedPeriod) || "Latest available month";
-
-      setLeaderboardPeriodLabel(selectedPeriodLabel);
-
-      const latestPeriodScores = scoresData.filter((row: any) => {
-        const periodStr = String(row.period || "").trim();
-        if (!periodStr || !selectedPeriod) return false;
-        return periodStr === selectedPeriod;
-      });
-
-      // 1) Current period score map (primary rank)
-      const currentScoresMap: Record<string, number> = {};
-      latestPeriodScores.forEach((row: any) => {
-        const enrollment_no = String(row.enrollment_no || "").trim();
-        if (!enrollment_no) return;
-
-        const points = Number(row.debate_score || row.points || 0) || 0;
-        currentScoresMap[enrollment_no] = (currentScoresMap[enrollment_no] || 0) + points;
-      });
-
-      // 2) Overall historical score map (tie-breaker)
-      const overallScoresMap: Record<string, number> = {};
-      scoresData.forEach((row: any) => {
-        const enrollment_no = String(row.enrollment_no || "").trim();
-        if (!enrollment_no) return;
-
-        const points = Number(row.debate_score || row.points || 0) || 0;
-        overallScoresMap[enrollment_no] = (overallScoresMap[enrollment_no] || 0) + points;
-      });
-
-      const rows = Object.entries(currentScoresMap)
-        .map(([enrollment_no, score]) => ({
-          enrollment_no,
-          score,
-          overallScore: overallScoresMap[enrollment_no] || 0,
-          name: nameMap[enrollment_no] || enrollment_no,
-        }))
-        .sort((a, b) => {
-          // Primary: current period score desc
-          if (b.score !== a.score) return b.score - a.score;
-          // Tie-breaker: overall historical score desc
-          if (b.overallScore !== a.overallScore) return b.overallScore - a.overallScore;
-          // Final deterministic fallback
-          return a.name.localeCompare(b.name);
-        })
-        .slice(0, 5)
-        .map(({ enrollment_no, score, name }) => ({ enrollment_no, score, name }));
-
-      setLeaderboard(rows);
-    } catch (error: any) {
-      console.error("Error fetching leaderboard:", error);
-      toast({
-        variant: "destructive",
-        title: "Error fetching leaderboard",
-        description: error.message,
-      });
-      setLeaderboard([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchGenderData = async () => {
-    try {
-      setGenderLoading(true);
-      const response = await adminAPI.getStudents();
-      
-      if (!response.success || !Array.isArray(response.data)) {
-        setGenderRawData([]);
-        setGenderSemesters([]);
-        return;
-      }
-
-      const rows = response.data
-        .filter((row: any) => String(row.member_type || "member").toLowerCase() !== "admin")
-        .map((r: any) => ({
-          gender: (r.gender || "unknown").toLowerCase(),
-          semester: r.semester ? String(r.semester).trim() : "Unknown",
-        }));
-
-      setGenderRawData(rows);
-      const sems = Array.from(new Set(rows.map((r) => r.semester))).sort() as string[];
-      setGenderSemesters(sems);
-    } catch (e) {
-      console.error("Gender data error:", e);
-      setGenderRawData([]);
-      setGenderSemesters([]);
-    } finally {
-      setGenderLoading(false);
-    }
-  };
-
-  const fetchPerformanceAnalytics = async () => {
-    try {
-      setAnalyticsLoading(true);
-      const [scoresResponse, studentsResponse] = await Promise.all([
-        adminAPI.getScores(),
-        adminAPI.getStudents()
-      ]);
-
-      if (!scoresResponse.success || !studentsResponse.success) {
-        throw new Error("Failed to fetch analytics data");
-      }
-
-      const scoresData = Array.isArray(scoresResponse.data?.leaderboardStats)
-        ? scoresResponse.data.leaderboardStats
-        : [];
-      const studentsData = Array.isArray(studentsResponse.data) ? studentsResponse.data : [];
-
-      const visibleStudents = studentsData.filter(
-        (student: any) => String(student.member_type || "member").toLowerCase() !== "admin"
-      );
-
-      const visibleEnrollmentSet = new Set(
-        visibleStudents.map((student: any) => String(student.enrollment_no || "").trim()).filter(Boolean)
-      );
-
-      const nameMap: Record<string, string> = {};
-      visibleStudents.forEach((student: any) => {
-        const en = String(student.enrollment_no || "").trim();
-        if (en) nameMap[en] = String(student.student_name || "").trim();
-      });
-
-      const scoreMap: Record<string, number> = {};
-      scoresData.forEach((row: any) => {
-        const enrollNo = String(row.enrollment_no || "").trim();
-        // Use debate_score from backend schema
-        const points = Number(row.debate_score || row.points || row.score || 0) || 0;
-        if (enrollNo && visibleEnrollmentSet.has(enrollNo)) {
-          scoreMap[enrollNo] = (scoreMap[enrollNo] || 0) + points;
-        }
-      });
-
-      const scoreTop5 = Object.entries(scoreMap)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 5)
-        .map(([enrollNo, score]) => {
-          const fullName = nameMap[enrollNo] || enrollNo;
-          const shortName = fullName.split(" ").slice(0, 2).join(" ");
-          return { name: shortName, score: Math.round(score) };
-        });
-
-      setTopScoreChart(scoreTop5);
-      setTopAttendanceChart([]);
-      setMonthlyTrendChart([]);
-
-      const scoreBandCounts = {
-        "0-50": 0,
-        "51-100": 0,
-        "101-150": 0,
-        "151+": 0,
-      };
-
-      visibleStudents.forEach((student: any) => {
-        const en = String(student.enrollment_no || "").trim();
-        const total = Number(scoreMap[en] || 0);
-        if (total <= 50) scoreBandCounts["0-50"] += 1;
-        else if (total <= 100) scoreBandCounts["51-100"] += 1;
-        else if (total <= 150) scoreBandCounts["101-150"] += 1;
-        else scoreBandCounts["151+"] += 1;
-      });
-
-      const bands: ScoreBandEntry[] = [
-        { name: "0-50", value: scoreBandCounts["0-50"], color: "#94a3b8" },
-        { name: "51-100", value: scoreBandCounts["51-100"], color: "#2dd4bf" },
-        { name: "101-150", value: scoreBandCounts["101-150"], color: "#0d9488" },
-        { name: "151+", value: scoreBandCounts["151+"], color: "#115e59" },
-      ];
-      setScoreBandChart(bands.filter((b) => b.value > 0));
-
-      const totalVisibleStudents = visibleStudents.length || 1;
-      const totalScore = Object.values(scoreMap).reduce((sum, v) => sum + v, 0);
-      setAvgScorePerStudent(Number((totalScore / totalVisibleStudents).toFixed(1)));
-      setAvgHoursPerStudent(0);
-      setHighPerformersCount(
-        visibleStudents.filter((student: any) => {
-          const en = String(student.enrollment_no || "").trim();
-          return Number(scoreMap[en] || 0) >= 100;
-        }).length
-      );
-    } catch (error) {
-      console.error("Performance analytics error:", error);
-      setTopScoreChart([]);
-      setTopAttendanceChart([]);
-      setMonthlyTrendChart([]);
-      setScoreBandChart([]);
-      setAvgScorePerStudent(0);
-      setAvgHoursPerStudent(0);
-      setHighPerformersCount(0);
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
-
-  const fetchActivities = async () => {
-    try {
-      setActivitiesLoading(true);
-      const response = await adminAPI.getActivities();
-
-      if (response.success && Array.isArray(response.data)) {
-        const sortedData = response.data.sort((a: any, b: any) => {
-          return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
-        });
         
-        setActivities(sortedData);
-      } else {
-        setActivities([]);
+        const trendResponses = await Promise.all(trendPromises);
+        const newTrendData = trendResponses.map((res, idx) => {
+          let topScore = 0;
+          if (res && Array.isArray(res.leaderboard) && res.leaderboard.length > 0) {
+            const topStudent = res.leaderboard.filter(isValidMember)[0];
+            if (topStudent) {
+              topScore = Number(topStudent.debate_score || topStudent.points || topStudent.total_score || topStudent.monthly_score || 0);
+            }
+          }
+          return { month: trendLabels[idx], score: Math.round(topScore) };
+        });
+        setTopScoreTrend(newTrendData);
+
+        // --- Process Top Hours (Graph 3 & Top Contributor MVP) ---
+        // Backend top-hours endpoint doesn't support month filtering, so we sort monthlyResponse by hours
+        let sourceHours = [];
+        if (monthlyResponse && Array.isArray(monthlyResponse.leaderboard)) {
+            sourceHours = [...monthlyResponse.leaderboard].sort((a: any, b: any) => {
+                const aHours = parseFloat(a.hours || a.total_hours || "0") || 0;
+                const bHours = parseFloat(b.hours || b.total_hours || "0") || 0;
+                return bHours - aHours;
+            });
+        }
+
+        if (sourceHours.length > 0) {
+          const formattedHours = sourceHours
+            .filter(isValidMember)
+            .slice(0, 5)
+            .map((s: any, index: number) => {
+              const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
+              const fills = ["#0f766e", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4"];
+              return { 
+                name: formatName(fullName), 
+                hours: parseFloat(s.hours || s.total_hours || "0") || 0, 
+                fill: fills[index] || "#ccfbf1", 
+                originalName: fullName,
+                image: s.image || s.photo_url || s.photoUrl || s.photo
+              };
+            });
+            
+          if (formattedHours.length > 0) {
+            setTimeDedication(formattedHours);
+            setTopContributor({ name: formattedHours[0].originalName, hours: formattedHours[0].hours, image: formattedHours[0].image });
+            
+            const total = sourceHours.reduce((sum: number, s: any) => sum + (parseFloat(s.hours || s.total_hours || "0") || 0), 0);
+            setHoursDedicated(total);
+          } else {
+            setTimeDedication([{ name: "No Data", hours: 0, fill: "#ccfbf1" }]);
+            setTopContributor({ name: "No Data", hours: 0 });
+            setHoursDedicated(0);
+          }
+        } else {
+            setTimeDedication([{ name: "No Data", hours: 0, fill: "#ccfbf1" }]);
+            setTopContributor({ name: "No Data", hours: 0 });
+            setHoursDedicated(0);
+        }
+        
+        // --- Fetch Previous Month Hours for % Change ---
+        let prevMonthIdx = currentMonthIdx - 1;
+        let prevYear = selectedYear;
+        if (prevMonthIdx < 0) { prevMonthIdx = 11; prevYear -= 1; }
+        const prevMonthResponse = await adminAPI.getMonthlyLeaderboard(prevMonthIdx + 1, prevYear).catch(() => ({ leaderboard: [] }));
+        if (prevMonthResponse && Array.isArray(prevMonthResponse.leaderboard)) {
+          const prevTotal = prevMonthResponse.leaderboard.reduce((sum: number, s: any) => sum + (parseFloat(s.hours || s.total_hours || "0") || 0), 0);
+          setPrevHoursDedicated(prevTotal);
+        } else {
+          setPrevHoursDedicated(0);
+        }
+
+      } catch (error) {
+        console.error("Dashboard fetch error:", error);
       }
-    } catch (error: any) {
-      console.error('Error fetching activities:', error);
-      setActivities([]);
-    } finally {
-      setActivitiesLoading(false);
-    }
+    };
+    fetchData();
+  }, [selectedMonth, selectedYear]);
+
+  const handleMonthChange = (m: string) => {
+    if (m === selectedMonth) return;
+    setIsAnimating(true);
+    setSelectedMonth(m);
+    setTimeout(() => setIsAnimating(false), 500);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
+  const currentMonthTop = topScoreTrend.length > 0 ? topScoreTrend[topScoreTrend.length - 1].score : 0;
+  const previousMonthTop = topScoreTrend.length > 1 ? topScoreTrend[topScoreTrend.length - 2].score : 0;
+  
+  let topScoreChange = 0;
+  if (previousMonthTop > 0) {
+    topScoreChange = ((currentMonthTop - previousMonthTop) / previousMonthTop) * 100;
+  }
+  
+  const avgTopScore = topScoreTrend.length > 0 ? Math.round(topScoreTrend.reduce((acc, curr) => acc + curr.score, 0) / topScoreTrend.length) : 0;
 
-  const genderPieData = (() => {
-    const filtered = selectedSemester === "all"
-      ? genderRawData
-      : genderRawData.filter((r) => r.semester === selectedSemester);
-    const males = filtered.filter((r) => r.gender === "male" || r.gender === "m").length;
-    const females = filtered.filter((r) => r.gender === "female" || r.gender === "f").length;
-    const others = filtered.length - males - females;
-    const result: GenderChartEntry[] = [];
-    if (males > 0) result.push({ name: "Male", value: males, color: "#0d9488" });
-    if (females > 0) result.push({ name: "Female", value: females, color: "#2dd4bf" });
-    if (others > 0) result.push({ name: "Other", value: others, color: "#94a3b8" });
-    return result;
-  })();
+  let hoursChange = 0;
+  if (prevHoursDedicated > 0) {
+    hoursChange = ((hoursDedicated - prevHoursDedicated) / prevHoursDedicated) * 100;
+  }
 
-  const RADIAN = Math.PI / 180;
-  const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-    if (percent < 0.05) return null;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (
-      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
 
   return (
-    <div className="space-y-6 sm:space-y-8 max-w-7xl animate-in fade-in duration-700">
-      {/* Welcome Banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 15 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#ece5d4] to-[#d8ecea] border border-white/40 shadow-[var(--shadow-card)] p-8 sm:p-12"
+    <div className="flex flex-col gap-3 sm:gap-4 max-w-7xl animate-in fade-in duration-700 pb-2 relative z-0">
+      <MonthNavigator 
+        selectedMonth={selectedMonth} 
+        onMonthChange={handleMonthChange} 
+        selectedYear={selectedYear} 
+        setSelectedYear={setSelectedYear} 
+      />
+
+      <motion.div 
+        animate={{ opacity: isAnimating ? 0.3 : 1, filter: isAnimating ? "blur(4px)" : "blur(0px)" }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col gap-3 sm:gap-4"
       >
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-green-500/10 rounded-full blur-[80px]" />
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 bg-teal-500/10 rounded-full blur-[60px]" />
-        
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-green-100 border border-green-200 text-[10px] font-bold tracking-[0.14em] uppercase text-green-700">
-              <Sparkles className="w-3.5 h-3.5" />
-              SRL Ecosystem
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight text-slate-900">
-              Welcome back,<br />
-              <span className="text-green-600">{welcomeName?.split(' ')[0] || "Scholar"}!</span>
-              {user?.enrollmentNo && (
-                <div className="mt-2 space-y-1">
-                  <span className="block text-xs font-mono text-slate-400">ID: {user.enrollmentNo}</span>
-                  <span className="block text-[10px] text-slate-500">
-                    Trace: {userMonthlyAttendance}% | {userMonthlyScore} pts | {userTotalScore} tot (Matched: {(userTotalScore > 0 ? "YES" : "NO")})
-                  </span>
-                </div>
-              )}
-            </h1>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:w-[600px]">
-            {user?.role === 'admin' ? (
-              <>
-                <div className="glass-card bg-white/60 border-green-100 p-6 rounded-[2rem] group transition-all duration-300 hover:bg-white hover:border-green-200">
-                  <p className="text-green-600 font-black text-3xl mb-1">{studentsCountLoading ? "..." : totalStudents}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-green-700/60 font-bold">
-                    Active Members
-                  </p>
-                </div>
-                {/*
-                <div className="glass-card bg-white/60 border-green-100 p-6 rounded-[2rem] group transition-all duration-300 hover:bg-white hover:border-green-200">
-                  <p className="text-green-600 font-black text-3xl mb-1">{attendanceLoading ? "..." : `${attendancePercent}%`}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-green-700/60 font-bold">
-                    Avg. Attendance
-                  </p>
-                </div>
-                */}
-              </>
-            ) : (
-              <>
-                <div className="glass-card bg-white/60 border-green-100 p-5 rounded-[2rem] group transition-all duration-300 hover:bg-white hover:border-green-200">
-                  <p className="text-green-600 font-black text-2xl mb-1">{userMetricsLoading ? "..." : `${userMonthlyAttendance}%`}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-green-700/60 font-bold">
-                    Monthly Att.
-                  </p>
-                </div>
-                <div className="glass-card bg-white/60 border-green-100 p-5 rounded-[2rem] group transition-all duration-300 hover:bg-white hover:border-green-200">
-                  <p className="text-green-600 font-black text-2xl mb-1">{userMetricsLoading ? "..." : userMonthlyScore}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-green-700/60 font-bold flex items-center gap-1 group-hover:text-green-700 transition-colors">
-                    Monthly Score
-                  </p>
-                </div>
-                <div className="glass-card bg-white/60 border-green-100 p-5 rounded-[2rem] group transition-all duration-300 hover:bg-white hover:border-green-200">
-                  <p className="text-green-600 font-black text-2xl mb-1">{userMetricsLoading ? "..." : userTotalScore}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-green-700/60 font-bold flex items-center gap-1 group-hover:text-green-700 transition-colors">
-                    Total Score
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Admin Dashboard - Stats Grid and Charts */}
-      {/* Stats Grid - Visible to all users */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-        <StatCard
-          icon={Users}
-          title="Total Students"
-          value={studentsCountLoading ? "..." : totalStudents}
-          subtitle="Live count from database"
-          delay={0}
-        />
-        <StatCard
-          icon={CalendarCheck}
-          title="Today's Attendance"
-          value={attendanceLoading ? "..." : `${attendancePercent}%`}
-          subtitle={attendanceLoading ? "Loading attendance..." : attendanceSubtitle}
-          delay={0.05}
-        />
-        <StatCard icon={BookOpen} title="Research Papers" value={24} subtitle="6 pending review" delay={0.1} />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-        {/*
-        <StatCard
-          icon={TrendingUp}
-          title="Avg Score / Student"
-          value={analyticsLoading ? "..." : avgScorePerStudent}
-          subtitle="Based on cumulative debate scores"
-          delay={0.12}
-        />
-        <StatCard
-          icon={Clock}
-          title="Avg Attendance Hours"
-          value={analyticsLoading ? "..." : avgHoursPerStudent}
-          subtitle="Cumulative hours per student"
-          delay={0.15}
-        />
-        <StatCard
-          icon={Activity}
-          title="High Performers"
-          value={analyticsLoading ? "..." : highPerformersCount}
-          subtitle="Students with score 100+"
-          delay={0.18}
-        />
-        */}
-      </div>
-
-      {/* Two column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 sm:gap-8">
-        {/* Leaderboard */}
+        {/* Row 1: Performance Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5 lg:col-span-3"
+          transition={{ delay: 0.1 }}
+          className="bg-white/50 backdrop-blur-xl border border-white/60 rounded-[1rem] p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:bg-white/70 transition-all duration-300"
         >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
-            <div>
-              <h2 className="text-xl font-black text-foreground flex items-center gap-3">
-                <div className="w-10 h-10 rounded-[1rem] bg-amber-50 border border-amber-100 flex items-center justify-center">
-                  <Trophy className="w-5 h-5 text-amber-600" />
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-3xl -mr-8 -mt-8 group-hover:bg-amber-500/20 transition-colors" />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-amber-100/50">
+              <Users className="w-4 h-4 text-amber-600" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Students</h3>
+          </div>
+          <div className="flex items-end gap-2">
+            <span className="text-2xl font-extrabold text-slate-800 tracking-tight">{totalStudents}</span>
+            <span className="text-xs font-bold text-amber-600 mb-1 flex items-center">Total</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white/50 backdrop-blur-xl border border-white/60 rounded-[1rem] p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:bg-white/70 transition-all duration-300"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-teal-500/10 rounded-full blur-3xl -mr-8 -mt-8 group-hover:bg-teal-500/20 transition-colors" />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-teal-100/50">
+              <Clock className="w-4 h-4 text-teal-600" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Hours Dedicated</h3>
+          </div>
+          <div className="flex items-end gap-2">
+            <span className="text-2xl font-extrabold text-slate-800 tracking-tight">{hoursDedicated.toLocaleString()}</span>
+            <span className="text-xs font-bold text-slate-500 mb-1">Hrs</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white/50 backdrop-blur-xl border border-white/60 rounded-[1rem] p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:bg-white/70 transition-all duration-300"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 rounded-full blur-3xl -mr-8 -mt-8 group-hover:bg-indigo-500/20 transition-colors" />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center border border-indigo-100/50">
+              <CalendarCheck className="w-4 h-4 text-indigo-600" />
+            </div>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sessions Conducted</h3>
+          </div>
+          <div className="flex items-end gap-2">
+            <span className="text-2xl font-extrabold text-slate-800 tracking-tight">{sessionsConducted}</span>
+            <span className="text-xs font-bold text-slate-500 mb-1">Sessions</span>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Row 2: Monthly MVPs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white/60 backdrop-blur-2xl border border-white/80 rounded-[1rem] p-3 sm:p-4 shadow-lg shadow-amber-900/5 relative overflow-hidden flex items-center justify-between gap-3 text-left"
+        >
+          <div className="absolute right-0 top-0 w-32 h-32 bg-gradient-to-br from-amber-200/30 to-yellow-400/10 rounded-full blur-3xl" />
+          
+          <div className="flex items-center gap-3 relative z-10 min-w-0">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-yellow-200 to-amber-600 shadow-lg">
+                <div className="w-full h-full rounded-full border-2 border-white overflow-hidden bg-white">
+                  <img src={academicLead?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(academicLead?.originalName || academicLead?.name || "No Data")}&background=random`} alt={academicLead?.name} className="w-full h-full object-cover" />
                 </div>
-                Score Leaderboard
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1.5 ml-12">Top Performers ({leaderboardPeriodLabel})</p>
-              <p className="text-[11px] text-muted-foreground mt-1 ml-12">Note: Showing latest available month data: {leaderboardPeriodLabel}.</p>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md border border-amber-100">
+                <Award className="w-3 h-3 text-amber-500" />
+              </div>
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-600 mb-0.5 flex items-center gap-1 truncate">
+                Academic Lead
+              </p>
+              <h2 className="text-base font-black text-slate-800 tracking-tight leading-none mt-0.5 truncate">{academicLead?.originalName || academicLead?.name}</h2>
             </div>
           </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+
+          <div className="relative z-10 shrink-0 pl-3 sm:pl-4 border-l border-amber-200/50 flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-amber-500 mb-0.5">
+              <Star className="w-3 h-3 fill-amber-500" />
             </div>
-          ) : leaderboard.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground text-sm">
-              No score data available for {leaderboardPeriodLabel}
+            <span className="text-xl sm:text-2xl font-black text-amber-600 leading-none">{academicLead?.score}</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-amber-600/70 uppercase tracking-wider mt-0.5">Points</span>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white/60 backdrop-blur-2xl border border-white/80 rounded-[1rem] p-3 sm:p-4 shadow-lg shadow-teal-900/5 relative overflow-hidden flex items-center justify-between gap-3 text-left"
+        >
+          <div className="absolute right-0 top-0 w-32 h-32 bg-gradient-to-br from-teal-200/30 to-emerald-400/10 rounded-full blur-3xl" />
+          
+          <div className="flex items-center gap-3 relative z-10 min-w-0">
+            <div className="relative shrink-0">
+              <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-teal-400 via-emerald-200 to-teal-600 shadow-lg">
+                <div className="w-full h-full rounded-full border-2 border-white overflow-hidden bg-white">
+                  <img src={topContributor?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(topContributor?.originalName || topContributor?.name || "No Data")}&background=random`} alt={topContributor?.name} className="w-full h-full object-cover" />
+                </div>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md border border-teal-100">
+                <Activity className="w-3 h-3 text-teal-500" />
+              </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {leaderboard.map((student, i) => (
-                <motion.div
-                  key={student.enrollment_no}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.25 + i * 0.05 }}
-                  className="flex items-center gap-4 p-5 rounded-[2rem] bg-background border border-border group hover:bg-white hover:shadow-xl hover:shadow-primary/5 transition-all duration-300"
-                >
-                  <div className={`w-12 h-12 flex items-center justify-center rounded-2xl text-sm font-black shadow-inner ${
-                    i === 0 ? 'bg-amber-50 text-amber-600 border border-amber-100' : 
-                    i === 1 ? 'bg-slate-100/50 text-slate-500 border border-slate-200/50' : 
-                    i === 2 ? 'bg-orange-50 text-orange-600 border border-orange-100' : 
-                    'bg-slate-50 text-muted-foreground border border-slate-100'
-                  }`}>
+            
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-teal-600 mb-0.5 flex items-center gap-1 truncate">
+                 Top Contributor
+              </p>
+              <h2 className="text-base font-black text-slate-800 tracking-tight leading-none mt-0.5 truncate">{topContributor?.name}</h2>
+            </div>
+          </div>
+
+          <div className="relative z-10 shrink-0 pl-3 sm:pl-4 border-l border-teal-200/50 flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1 text-teal-500 mb-0.5">
+              <Clock className="w-3 h-3" />
+            </div>
+            <span className="text-xl sm:text-2xl font-black text-teal-600 leading-none">{Number(topContributor?.hours).toFixed(1)}</span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-teal-600/70 uppercase tracking-wider mt-0.5">Hours</span>
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+        {/* Graph 1: Top 5 Cumulative Researchers */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-[1rem] p-4 shadow-sm min-w-0 flex flex-col relative"
+        >
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
+              <Users className="w-4 h-4 text-amber-500" />
+              Top 5 Researchers
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-500 font-semibold mb-3">
+            Total Research Contributions <Info className="w-3 h-3 ml-0.5" />
+          </div>
+
+          <div className="h-[170px] w-full shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={cumulativeData.length > 0 ? cumulativeData : [{name: "No Data", score: 0}]} margin={{ top: 45, right: 0, left: 0, bottom: 45 }}>
+                <defs>
+                  <linearGradient id="colorOrange" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ea580c" stopOpacity={1}/>
+                    <stop offset="95%" stopColor="#fcd34d" stopOpacity={0.8}/>
+                  </linearGradient>
+                  <clipPath id="avatarClip">
+                    <circle cx="0" cy="20" r="15" />
+                  </clipPath>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={(props: any) => {
+                    const { x, y, payload } = props;
+                    const nameParts = payload.value.split(" ");
+                    const studentData = cumulativeData.find(s => s.name === payload.value);
+                    const imgUrl = studentData?.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(payload.value)}&background=random&rounded=true`;
+                    return (
+                      <g transform={`translate(${x},${y})`}>
+                        <image x={-15} y={5} width={30} height={30} href={imgUrl} clipPath="url(#avatarClip)" />
+                        <text x={0} y={45} textAnchor="middle" fill="#334155" fontSize={10} fontWeight={800}>{nameParts[0]}</text>
+                        <text x={0} y={57} textAnchor="middle" fill="#334155" fontSize={10} fontWeight={800}>{nameParts[1] || ""}</text>
+                      </g>
+                    );
+                  }} 
+                  interval={0}
+                />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} dx={-10} width={30} />
+                <Bar dataKey="score" fill="url(#colorOrange)" radius={[8, 8, 0, 0]} barSize={40}>
+                  <LabelList 
+                    dataKey="score" 
+                    position="top" 
+                    content={(props: any) => {
+                      const { x, y, value, index } = props;
+                      const colors = ["#fbbf24", "#94a3b8", "#b45309"];
+                      return (
+                        <g transform={`translate(${x + 20},${y - 12})`}>
+                          {index < 3 && (
+                            <svg width="24" height="24" x="-12" y="-32" viewBox="0 0 24 24" fill={colors[index]} opacity="0.8">
+                              <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/>
+                            </svg>
+                          )}
+                          <text x={0} y={0} fill="#1e293b" fontSize={12} fontWeight={900} textAnchor="middle">{value}</text>
+                        </g>
+                      );
+                    }} 
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="mt-2 bg-[#F8FAF9] rounded-xl p-2 flex items-center justify-between border border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-100/50 flex items-center justify-center text-amber-600"><Users className="w-3 h-3" /></div>
+              <div>
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Total Researchers</p>
+                <p className="text-sm font-black text-slate-800 leading-none">{totalStudents}</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold text-emerald-600 flex items-center justify-end gap-0.5"><TrendingUp className="w-3.5 h-3.5" /> 12.4%</p>
+              <p className="text-[10px] text-slate-400 font-bold">vs Mar 2026</p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Graph 2: Monthly Top Scores Trend */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-[1rem] p-4 shadow-sm min-w-0 flex flex-col relative"
+        >
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-500" />
+              Monthly Top Scores
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-500 font-semibold mb-3">
+            Top Score Trend (Points) <Info className="w-3 h-3 ml-0.5" />
+          </div>
+
+          <div className="h-[170px] w-full shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={topScoreTrend} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
+                <defs>
+                  <linearGradient id="colorGreen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={(props: any) => {
+                    const { x, y, payload } = props;
+                    const parts = payload.value.split(" ");
+                    return (
+                      <g transform={`translate(${x},${y+10})`}>
+                        <text x={0} y={0} textAnchor="middle" fill="#64748b" fontSize={10} fontWeight={700}>{parts[0]}</text>
+                        <text x={0} y={12} textAnchor="middle" fill="#94a3b8" fontSize={10} fontWeight={600}>{parts[1]}</text>
+                      </g>
+                    );
+                  }} dy={10} interval={0} 
+                />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }} dx={-10} width={30} />
+                <RechartsTooltip cursor={{ stroke: '#10b981', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontWeight: 600 }} />
+                <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorGreen)" activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} >
+                   <LabelList dataKey="score" position="top" offset={10} style={{ fill: '#1e293b', fontSize: 11, fontWeight: 800 }} />
+                </Area>
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="mt-2 bg-[#F8FAF9] rounded-xl p-2 flex items-center justify-between border border-slate-100">
+            <div>
+              <p className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-0.5"><Award className="w-3 h-3 text-emerald-600" /> Top Score ({selectedMonth})</p>
+              <p className="text-sm font-black text-slate-800 leading-none mt-0.5">{currentMonthTop} <span className="text-[9px] text-slate-500">pts</span></p>
+            </div>
+            <div className="px-2 border-x border-slate-200">
+              <p className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-0.5"><TrendingUp className="w-3 h-3 text-emerald-600" /> Change</p>
+              <p className={`text-[11px] font-bold mt-0.5 ${topScoreChange >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                {topScoreChange >= 0 ? "↑" : "↓"} {Math.abs(topScoreChange).toFixed(1)}%
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 font-bold uppercase flex items-center justify-end gap-0.5"><Target className="w-3 h-3 text-emerald-600" /> Avg</p>
+              <p className="text-sm font-black text-slate-800 mt-0.5">{avgTopScore} <span className="text-[9px] text-slate-500">pts</span></p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Graph 3: Top Hours Dedicated */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="bg-white/80 backdrop-blur-xl border border-white/80 rounded-[1rem] p-4 shadow-sm min-w-0 flex flex-col relative"
+        >
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-500" />
+              Top Hours Dedicated
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-500 font-semibold mb-3">
+            Total Hours Contributed <Info className="w-3 h-3 ml-0.5" />
+          </div>
+
+          <div className="h-[170px] w-full flex flex-col justify-between py-1 shrink-0">
+            {timeDedication.slice(0, 5).map((item, i) => {
+              const maxHours = timeDedication[0]?.hours || 1;
+              const percent = Math.min(100, (item.hours / maxHours) * 100);
+              
+              let rankColor = "bg-slate-200 text-slate-600";
+              if (i === 0) rankColor = "bg-amber-400 text-white shadow-md shadow-amber-400/20";
+              if (i === 1) rankColor = "bg-slate-300 text-white shadow-md shadow-slate-300/20";
+              if (i === 2) rankColor = "bg-orange-400 text-white shadow-md shadow-orange-400/20";
+
+              return (
+                <div key={i} className="flex items-center gap-2 w-full">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${rankColor}`}>
                     {i + 1}
                   </div>
+                  <img src={item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random`} alt={item.name} className="w-6 h-6 rounded-full border border-slate-100 shadow-sm shrink-0 object-cover" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-extrabold text-foreground truncate group-hover:text-primary transition-colors">{student.name}</p>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="font-mono text-sm font-black text-foreground">{student.score} pts</span>
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-primary">
-                      <TrendingUp className="w-3 h-3" />
-                      TOP {i + 1}
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[11px] font-extrabold text-slate-800 truncate">{item.name}</p>
+                      <p className="text-[11px] font-black text-indigo-600 shrink-0">{item.hours.toFixed(1)} Hrs</p>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-indigo-400 h-full rounded-full" style={{ width: `${percent}%` }} />
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Recent Activities */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5 lg:col-span-2"
-        >
-          <div className="mb-10">
-            <h2 className="text-xl font-black text-foreground flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[1rem] bg-primary/5 border border-primary/10 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-primary" />
-              </div>
-              Recent Activities
-            </h2>
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1.5 ml-12">Latest lab updates</p>
+                </div>
+              );
+            })}
           </div>
-          {activitiesLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+
+          <div className="mt-2 bg-[#F8FAF9] rounded-xl p-2 flex items-center justify-between border border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-indigo-100/50 flex items-center justify-center text-indigo-600"><Clock className="w-3 h-3" /></div>
+              <div>
+                <p className="text-[9px] text-slate-500 font-bold uppercase">Total Hours</p>
+                <p className="text-sm font-black text-slate-800 leading-none">{hoursDedicated.toFixed(1)} Hrs</p>
+              </div>
             </div>
-          ) : activities.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              No activities yet
+            <div className="text-right">
+              <p className={`text-sm font-bold flex items-center justify-end gap-0.5 ${hoursChange >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                <TrendingUp className={`w-3.5 h-3.5 ${hoursChange < 0 && "rotate-180"}`} /> {Math.abs(hoursChange).toFixed(1)}%
+              </p>
+              <p className="text-[10px] text-slate-400 font-bold">vs Prev Month</p>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {activities.map((activity, i) => (
-                <motion.div
-                  key={activity.id}
-                  initial={{ opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + i * 0.05 }}
-                  className="relative pl-7 border-l-2 border-border hover:border-primary transition-colors duration-500"
-                >
-                  <div className="absolute -left-[6px] top-1 w-2.5 h-2.5 rounded-full bg-border border-2 border-white group-hover:bg-primary transition-colors" />
-                  <div className="min-w-0 flex-1 group">
-                    <p className="text-sm font-extrabold text-foreground group-hover:text-primary transition-colors">{activity.title}</p>
-                    {activity.description && (
-                      <p className="text-xs font-semibold text-muted-foreground/80 mt-2 line-clamp-2 leading-relaxed">
-                        {activity.description}
-                      </p>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
+          </div>
         </motion.div>
       </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-        {/* Bar Chart - Top 5 by Score (HIDDEN) */}
-        {false && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-lg font-black text-foreground flex items-center gap-3">
-                <BarChart2 className="w-5 h-5 text-primary" />
-                Performance Rank
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1 ml-8">Total cumulative points</p>
-            </div>
-          </div>
-          {analyticsLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : topScoreChart.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No data available</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={topScoreChart} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" } as any}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={0}
-                />
-                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" } as any} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="score" name="Score" fill="#0d9488" radius={[6, 6, 0, 0]} maxBarSize={36} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </motion.div>
-        )}
-
-        {/* Bar Chart - Top 5 by Attendance Hours (HIDDEN) */}
-        {false && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.38, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-lg font-black text-foreground flex items-center gap-3">
-                <CalendarCheck className="w-5 h-5 text-primary" />
-                Attendance Leader
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1 ml-8">Most active this month</p>
-            </div>
-          </div>
-          {analyticsLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : topAttendanceChart.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No data available</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={topAttendanceChart} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" } as any}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={0}
-                />
-                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" } as any} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    fontSize: 12,
-                  }}
-                />
-                <Bar dataKey="hours" name="Hours" fill="#115e59" radius={[6, 6, 0, 0]} maxBarSize={36} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </motion.div>
-        )}
-
-        {/* Line Chart - Monthly Trends (HIDDEN) */}
-        {false && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-lg font-black text-foreground flex items-center gap-3">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Growth Velocity
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1 ml-8">Score & hours progress</p>
-            </div>
-          </div>
-          {analyticsLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : monthlyTrendChart.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No trend data available</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={monthlyTrendChart} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.4} />
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "var(--muted-foreground)" } as any} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" } as any} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "10px",
-                    fontSize: 12,
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="score" name="Score" stroke="#0d9488" strokeWidth={2.2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="hours" name="Hours" stroke="#115e59" strokeWidth={2.2} dot={{ r: 3 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </motion.div>
-        )}
-
-        {/* Pie Chart - Score Distribution (HIDDEN) */}
-        {false && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.43, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-lg font-black text-foreground flex items-center gap-3">
-                <PieIcon className="w-5 h-5 text-primary" />
-                Score Distribution
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1 ml-8">Talent segmentation</p>
-            </div>
-          </div>
-          {analyticsLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : scoreBandChart.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No score distribution available</div>
-          ) : (
-            <div className="flex flex-col items-center gap-4">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={scoreBandChart}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    dataKey="value"
-                    labelLine={false}
-                    label={renderCustomLabel}
-                  >
-                    {scoreBandChart.map((entry, index) => (
-                      <Cell key={`score-cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "10px",
-                      fontSize: 12,
-                    }}
-                    formatter={(value: number, name: string) => [value, name]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap justify-center gap-3">
-                {scoreBandChart.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full" style={{ background: entry.color }} />
-                    <span className="text-xs text-muted-foreground">{entry.name}</span>
-                    <span className="text-xs font-semibold">{entry.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </motion.div>
-        )}
-
-        {/* Pie Chart - Gender Ratio by Semester */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.4 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="flex items-center justify-between mb-10">
-            <div>
-              <h2 className="text-lg font-black text-foreground flex items-center gap-3">
-                <PieIcon className="w-5 h-5 text-primary" />
-                Demographics
-              </h2>
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.14em] mt-1 ml-8">Gender balance ratio</p>
-            </div>
-            <Select value={selectedSemester} onValueChange={setSelectedSemester}>
-              <SelectTrigger className="w-32 h-9 rounded-xl border-border bg-background text-[10px] font-bold uppercase tracking-[0.1em]">
-                <SelectValue placeholder="Semester" />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl border-border">
-                <SelectItem value="all" className="text-xs font-semibold">ALL SEMESTERS</SelectItem>
-                {genderSemesters.map((sem) => (
-                  <SelectItem key={sem} value={sem} className="text-xs font-semibold">
-                    SEMESTER {sem}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {genderLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          ) : genderPieData.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No gender data available</div>
-          ) : (
-            <div className="flex flex-col items-center gap-4">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={genderPieData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    dataKey="value"
-                    labelLine={false}
-                    label={renderCustomLabel}
-                  >
-                    {genderPieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "10px",
-                      fontSize: 12,
-                    }}
-                    formatter={(value: number, name: string) => [value, name]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex gap-4">
-                {genderPieData.map((entry) => (
-                  <div key={entry.name} className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 rounded-full" style={{ background: entry.color }} />
-                    <span className="text-xs text-muted-foreground">{entry.name}</span>
-                    <span className="text-xs font-semibold">{entry.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
+      </motion.div>
     </div>
   );
 }

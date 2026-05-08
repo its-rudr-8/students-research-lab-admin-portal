@@ -112,7 +112,31 @@ export const adminAPI = {
 
   // Students APIs
   async getStudents() {
-    return apiCall("/admin/students");
+    const [res, leaderboardRes] = await Promise.all([
+      apiCall("/admin/students").catch(() => null),
+      apiCall("/leaderboard").catch(() => null)
+    ]);
+
+    const leaderboard = leaderboardRes?.leaderboard || (Array.isArray(leaderboardRes) ? leaderboardRes : []);
+    const imageMap = new Map();
+    leaderboard.forEach((r: any) => {
+      if (r.enrollment_no && (r.photo || r.image || r.photo_url || r.photoUrl)) {
+        imageMap.set(r.enrollment_no, r.photo || r.image || r.photo_url || r.photoUrl);
+      }
+    });
+
+    if (res && Array.isArray(res.data)) {
+      res.data = res.data.map((s: any) => ({
+        ...s,
+        photo_url: s.photo_url || s.image || s.photo || s.photoUrl || imageMap.get(s.enrollment_no)
+      }));
+    } else if (Array.isArray(res)) {
+      return res.map((s: any) => ({
+        ...s,
+        photo_url: s.photo_url || s.image || s.photo || s.photoUrl || imageMap.get(s.enrollment_no)
+      }));
+    }
+    return res;
   },
 
   async getStudent(enrollmentNo: string) {
@@ -171,6 +195,27 @@ export const adminAPI = {
 
   async deleteScore(id: string) {
     return apiCall(`/admin/scores/${id}`, "DELETE");
+  },
+
+  // Leaderboard APIs (Mirroring public endpoints for accurate dashboard metrics)
+  async getLeaderboard() {
+    return apiCall("/leaderboard");
+  },
+
+  async getMonthlyLeaderboard(month?: string | number, year?: number) {
+    let endpoint = "/leaderboard/monthly";
+    if (month && year) {
+      endpoint += `?month=${month}&year=${year}`;
+    }
+    return apiCall(endpoint);
+  },
+
+  async getTopHoursLeaderboard(month?: string | number, year?: number) {
+    let endpoint = "/leaderboard/top-hours";
+    if (month && year) {
+      endpoint += `?month=${month}&year=${year}`;
+    }
+    return apiCall(endpoint);
   },
 
   // Attendance APIs
