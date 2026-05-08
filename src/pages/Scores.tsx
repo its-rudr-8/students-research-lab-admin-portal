@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Plus, Edit2, Check, X } from "lucide-react";
+import { Trophy, Plus, Clock, Star, ChevronLeft, ChevronRight, Pencil, Trash2, X, Search, Loader2, Medal } from "lucide-react";
 import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI } from "@/lib/adminApi";
@@ -12,6 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 interface ScoreRow {
   id: string;
@@ -20,410 +24,330 @@ interface ScoreRow {
   name: string;
   initials: string;
   photo_url?: string;
+  hours?: number;
+  batch?: string;
+  department?: string;
 }
+
+const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
+const PG = 7; 
 
 export default function Scores() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
-  const [students, setStudents] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState("");
   const [cachedLeaderboardStats, setCachedLeaderboardStats] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
-
+  const [viewMode, setViewMode] = useState<"cumulative" | "monthly" | "contributors">("cumulative");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<number>(0);
-  const [isAddingScore, setIsAddingScore] = useState(false);
-  const [newScoreEnrollment, setNewScoreEnrollment] = useState("");
-  const [newScorePoints, setNewScorePoints] = useState(0);
-  const [searchName, setSearchName] = useState("");
-
-  const canEdit = hasWriteAccess();
   const { toast } = useToast();
 
+  // CRUD States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingScore, setEditingScore] = useState<ScoreRow | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Form States
+  const [formData, setFormData] = useState({
+    points: 0,
+    hours: 0,
+    enrollment_no: "",
+    period: ""
+  });
+
   const normalizeText = (value: unknown) => String(value || "").trim();
+
   const monthRank = (value: string) => {
     const raw = normalizeText(value);
     const match = raw.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
     if (!match) return 0;
-
-    const monthLookup: Record<string, number> = {
-      jan: 1, january: 1,
-      feb: 2, february: 2,
-      mar: 3, march: 3,
-      apr: 4, april: 4,
-      may: 5,
-      jun: 6, june: 6,
-      jul: 7, july: 7,
-      aug: 8, august: 8,
-      sep: 9, sept: 9, september: 9,
-      oct: 10, october: 10,
-      nov: 11, november: 11,
-      dec: 12, december: 12,
-    };
-
-    const monthNumber = monthLookup[match[1].toLowerCase()] || 0;
-    const yearNumber = Number(match[2]) || 0;
-    return yearNumber * 100 + monthNumber;
+    const m: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    return (Number(match[2]) || 0) * 100 + (m[match[1].toLowerCase().substring(0, 3)] || 0);
   };
 
-  const buildMonthOptions = (data: any, leaderboardStats: any[]): string[] => {
-    const availableMonths = Array.isArray(data?.availableMonths) ? data.availableMonths : [];
-    const monthsFromAvailable: string[] = availableMonths
-      .map((item: any) => normalizeText(item?.label || item?.value || item?.period))
-      .filter((period: string) => period && !/^all\s*time$/i.test(period));
-
-    if (monthsFromAvailable.length > 0) {
-      return Array.from(new Set<string>(monthsFromAvailable)).sort((a: string, b: string) => monthRank(b) - monthRank(a));
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [scoresRes, studentsRes] = await Promise.all([adminAPI.getScores(), adminAPI.getStudents()]);
+      if (!scoresRes.success) { setLoading(false); return; }
+      const stats = Array.isArray(scoresRes.data.leaderboardStats) ? scoresRes.data.leaderboardStats : [];
+      setCachedStudentsData(studentsRes.data || []);
+      const months = Array.from(new Set<string>(stats.map((r: any) => normalizeText(r.period)).filter((p: string) => p && !/^all\s*time$/i.test(p)))).sort((a, b) => monthRank(b) - monthRank(a));
+      setMonthOptions(months);
+      setCachedLeaderboardStats(stats);
+      if (months.length > 0 && !selectedMonth) setSelectedMonth(months[0]);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setLoading(false);
     }
-
-    const monthsFromLeaderboard: string[] = leaderboardStats
-      .map((row: any) => normalizeText(row.period))
-      .filter((period: string) => period && !/^all\s*time$/i.test(period));
-
-    return Array.from(new Set<string>(monthsFromLeaderboard)).sort((a: string, b: string) => monthRank(b) - monthRank(a));
   };
 
-  const pickLatestRowsByEnrollment = (rows: any[]) => {
-    const latestByEnrollment = new Map<string, any>();
+  useEffect(() => { loadData(); }, []);
 
-    rows.forEach((row: any) => {
-      const enrollment = normalizeText(row.enrollment_no);
-      if (!enrollment) return;
-
-      const nextTime = new Date(row.created_at || 0).getTime();
-      const current = latestByEnrollment.get(enrollment);
-      const currentTime = current ? new Date(current.created_at || 0).getTime() : -1;
-
-      if (!current || nextTime >= currentTime) {
-        latestByEnrollment.set(enrollment, row);
-      }
-    });
-
-    return Array.from(latestByEnrollment.values());
-  };
-
-  // Fetch all available data on mount
   useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const [scoresResponse, studentsResponse] = await Promise.all([
-          adminAPI.getScores(),
-          adminAPI.getStudents()
-        ]);
-
-        if (!scoresResponse.success) {
-          setFetchError("Failed to fetch scores from backend");
-          setLoading(false);
-          return;
-        }
-
-        const data = scoresResponse.data;
-        const leaderboardStats = Array.isArray(data.leaderboardStats) ? data.leaderboardStats : [];
-
-        // Build student name map
-        const nameMap = new Map<string, string>();
-        if (Array.isArray(studentsResponse.data)) {
-          studentsResponse.data.forEach((stu: any) => {
-            const enrollment = normalizeText(stu.enrollment_no);
-            const name = normalizeText(stu.student_name);
-            if (enrollment && name) {
-              nameMap.set(enrollment, name);
-            }
+    if (cachedLeaderboardStats.length === 0) return;
+    try {
+      const nameMap = new Map<string, any>();
+      cachedStudentsData.forEach((s: any) => { const e = normalizeText(s.enrollment_no); if (e) nameMap.set(e, s); });
+      const agg = new Map<string, ScoreRow>();
+      const stats = viewMode === "cumulative" ? cachedLeaderboardStats : cachedLeaderboardStats.filter(s => normalizeText(s.period) === selectedMonth);
+      stats.forEach((score: any) => {
+        const enr = normalizeText(score.enrollment_no);
+        const stu = nameMap.get(enr) || {};
+        const name = normalizeText(stu.student_name) || enr;
+        if (!agg.has(enr)) {
+          agg.set(enr, { 
+            id: normalizeText(score.id), 
+            enrollment_no: enr, 
+            points: Number(score.debate_score || score.points || score.total_score) || 0, 
+            name, 
+            initials: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2), 
+            photo_url: stu.photo_url || score.image || score.photo, 
+            hours: Number(score.hours || score.total_hours || 0),
+            batch: stu.batch,
+            department: stu.department
           });
-        }
-        setStudents(nameMap);
-        setCachedStudentsData(studentsResponse.data || []);
-
-        const monthsArr = buildMonthOptions(data, leaderboardStats);
-        setMonthOptions(monthsArr);
-
-        // Cache leaderboard stats
-        setCachedLeaderboardStats(leaderboardStats);
-
-        // Set default to first/most recent month
-        if (monthsArr.length > 0) {
-          setSelectedMonth(monthsArr[0]);
-        }
-
-        setLoading(false);
-      } catch (error: any) {
-        setFetchError(error.message || "Failed to fetch scores");
-        console.error("Error fetching scores:", error);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: error.message || "Failed to fetch scores",
-        });
-        setLoading(false);
-      }
-    };
-
-    fetchInitialData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Process data for selected month - uses cached data
-  useEffect(() => {
-    if (!selectedMonth || cachedLeaderboardStats.length === 0) {
-      setScores([]);
-      return;
-    }
-
-    try {
-      const monthlyScores = cachedLeaderboardStats.filter((score: any) => {
-        return normalizeText(score.period) === selectedMonth;
-      });
-
-      const uniqueMonthlyScores = pickLatestRowsByEnrollment(monthlyScores);
-
-      const nameMap = new Map<string, string>();
-      cachedStudentsData.forEach((stu: any) => {
-        const enrollment = normalizeText(stu.enrollment_no);
-        const name = normalizeText(stu.student_name);
-        if (enrollment && name) {
-          nameMap.set(enrollment, name);
+        } else {
+          const ex = agg.get(enr)!;
+          ex.points += Number(score.debate_score || score.points || 0);
+          if (viewMode === "cumulative") ex.hours = Number(((ex.hours || 0) + Number(score.hours || 0)).toFixed(1));
         }
       });
+      let rows = Array.from(agg.values());
+      rows.sort((a, b) => viewMode === "contributors" ? (b.hours || 0) - (a.hours || 0) : b.points - a.points);
+      setScores(rows);
+    } catch (e) { console.error(e); }
+  }, [viewMode, selectedMonth, cachedLeaderboardStats, cachedStudentsData]);
 
-      const scoreRows: ScoreRow[] = uniqueMonthlyScores
-        .map((score: any) => {
-          const enrollment = normalizeText(score.enrollment_no);
-          const name = nameMap.get(enrollment) || enrollment;
-          const initials = typeof name === "string" && name.length > 0
-            ? name.split(" ").map((n: string) => n[0]).join("").toUpperCase()
-            : enrollment.slice(0, 2).toUpperCase();
+  const paged = scores.slice((currentPage - 1) * PG, currentPage * PG);
 
-          return {
-            id: normalizeText(score.id),
-            enrollment_no: enrollment,
-            points: Number(score.debate_score) || 0,
-            name,
-            initials,
-            photo_url: undefined,
-          };
-        })
-        .sort((a, b) => b.points - a.points);
-
-      setScores(scoreRows);
-      setCurrentPage(1); // Reset to page 1 when month changes
-    } catch (error: any) {
-      console.error("Error processing scores:", error);
-      setScores([]);
-    }
-  }, [selectedMonth, cachedLeaderboardStats, cachedStudentsData]);
-
-  const handleAddScore = async () => {
-    if (!newScoreEnrollment || newScorePoints < 0 || !selectedMonth) {
-      toast({
-        variant: "destructive",
-        title: "Invalid input",
-        description: "Please select a student and enter a valid score",
-      });
-      return;
-    }
-
-    try {
-      const response = await adminAPI.createScore({
-        enrollment_no: newScoreEnrollment,
-        points: newScorePoints,
-        period: selectedMonth,
-      });
-
-      if (response.success) {
-        toast({
-          title: "Success",
-          description: "Score added successfully",
-        });
-        setNewScoreEnrollment("");
-        setNewScorePoints(0);
-        setIsAddingScore(false);
-
-        const scoresResponse = await adminAPI.getScores();
-        if (scoresResponse.success) {
-          const leaderboardStats = Array.isArray(scoresResponse.data.leaderboardStats) ? scoresResponse.data.leaderboardStats : [];
-          setCachedLeaderboardStats(leaderboardStats);
-
-          const monthsArr = buildMonthOptions(scoresResponse.data, leaderboardStats);
-          setMonthOptions(monthsArr);
-          if (monthsArr.length > 0 && !monthsArr.includes(selectedMonth)) {
-            setSelectedMonth(monthsArr[0]);
-          }
-        }
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: response.error || "Failed to add score",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to add score",
-      });
-    }
+  const handleEditClick = (score: ScoreRow) => {
+    setEditingScore(score);
+    setFormData({ points: score.points, hours: score.hours || 0, enrollment_no: score.enrollment_no, period: selectedMonth || "" });
+    setIsEditModalOpen(true);
   };
 
-  const handleUpdateScore = async (id: string, newPoints: number) => {
+  const handleUpdate = async () => {
+    if (!editingScore) return;
+    setIsSaving(true);
     try {
-      const response = await adminAPI.updateScore(id, { points: newPoints });
-
-      if (response.success) {
-        toast({
-          title: "Success",
-          description: "Score updated successfully",
-        });
-        setEditingId(null);
-
-        const scoresResponse = await adminAPI.getScores();
-        if (scoresResponse.success) {
-          const leaderboardStats = Array.isArray(scoresResponse.data.leaderboardStats) ? scoresResponse.data.leaderboardStats : [];
-          setCachedLeaderboardStats(leaderboardStats);
-
-          const monthsArr = buildMonthOptions(scoresResponse.data, leaderboardStats);
-          setMonthOptions(monthsArr);
-        }
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: response.error || "Failed to update score",
-        });
+      const res = await adminAPI.updateScore(editingScore.id, { points: formData.points, hours: formData.hours });
+      if (res.success) {
+        toast({ title: "Updated" });
+        setIsEditModalOpen(false);
+        loadData();
       }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to update score",
-      });
-    }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
+    finally { setIsSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!editingScore) return;
+    if (!confirm("Delete this record?")) return;
+    setIsSaving(true);
+    try {
+      const res = await adminAPI.deleteScore(editingScore.id);
+      if (res.success) {
+        toast({ title: "Deleted" });
+        setIsEditModalOpen(false);
+        loadData();
+      }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
+    finally { setIsSaving(false); }
+  };
+
+  const handleAdd = async () => {
+    setIsSaving(true);
+    try {
+      const res = await adminAPI.createScore({ enrollment_no: formData.enrollment_no, points: formData.points, hours: formData.hours, period: formData.period || selectedMonth });
+      if (res.success) {
+        toast({ title: "Added" });
+        setIsAddModalOpen(false);
+        loadData();
+      }
+    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
+    finally { setIsSaving(false); }
   };
 
   return (
-    <div className="space-y-3 max-w-full pl-6 md:pl-10 pr-4 -mt-2">
-      {/* Month Selection Filter */}
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-          <h2 className="text-base sm:text-lg font-bold text-[#8B735B] shrink-0">
-            Scores for
-          </h2>
-          {!canEdit && <p className="text-xs text-muted-foreground sm:ml-2">You have read-only access.</p>}
-          <Select
-            value={selectedMonth || ""}
-            onValueChange={(value) => setSelectedMonth(value || null)}
-            disabled={monthOptions.length === 0}
-          >
-            <SelectTrigger className="px-3 py-1.5 h-auto rounded-lg border-2 border-[#EAD8C0] bg-[#FAF7F2] text-[#8B735B] text-sm font-bold w-32 sm:w-auto hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/30">
-              <SelectValue placeholder="Select Month" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
-              {monthOptions.map((month, index) => (
-                <SelectItem 
-                  key={`month-${index}`} 
-                  value={month}
-                  className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer text-[#8B735B] font-medium"
-                >
-                  {month}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+    <div style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif", maxWidth: 1160, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      
+      {/* Top Bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, gap: 14, flexWrap: "wrap", flexShrink: 0 }}>
+        <div style={{ display: "inline-flex", gap: 5, padding: 6, borderRadius: 50, background: "linear-gradient(135deg,#eae6dc,#f2ede4)", border: "1px solid #d8d2c6", boxShadow: "inset 0 1.5px 4px rgba(0,0,0,0.08)" }}>
+          {[
+            { id: "cumulative", label: "All-Time", icon: <Trophy size={14} /> },
+            { id: "monthly", label: "Monthly", icon: <Star size={14} /> },
+            { id: "contributors", label: "Hours", icon: <Clock size={14} /> }
+          ].map(m => {
+            const active = viewMode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => { setViewMode(m.id as any); setCurrentPage(1); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7, padding: "8px 20px", borderRadius: 50, border: "none", cursor: "pointer", fontSize: "0.835rem", fontWeight: active ? 700 : 500,
+                  background: active ? GRN : "transparent", color: active ? "#fff" : "#8a7e72", transition: "all 0.2s", boxShadow: active ? "0 3px 12px rgba(26,74,52,0.3)" : "none"
+                }}
+              >
+                {m.icon} {m.label}
+              </button>
+            );
+          })}
         </div>
-        {canEdit && (
-          <button
-            onClick={() => setIsAddingScore(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-full text-sm font-bold transition-all shadow-md active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            Add Score
-          </button>
-        )}
-      </motion.div>
 
-      {/* Add Score Form */}
-      <AnimatePresence>
-        {isAddingScore && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="mb-4 p-4 sm:p-6 border-2 border-[#EAD8C0]/50 rounded-2xl bg-gradient-to-br from-[#FAF7F2]/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
-              <div className="flex flex-col md:flex-row gap-4 md:items-end">
-                <div className="flex-1 space-y-2">
-                  <label className="text-sm font-bold text-[#8B735B]">Student Enrollment</label>
-                  <Select
-                    value={newScoreEnrollment}
-                    onValueChange={(value) => setNewScoreEnrollment(value)}
-                  >
-                    <SelectTrigger className="w-full border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 h-auto rounded-lg text-sm text-[#8B735B] font-medium focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/20">
-                      <SelectValue placeholder="Select Student" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
-                      {cachedStudentsData.map((stu) => (
-                        <SelectItem 
-                          key={stu.enrollment_no} 
-                          value={stu.enrollment_no}
-                          className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer"
-                        >
-                          {stu.student_name} ({stu.enrollment_no})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {viewMode !== "cumulative" && (
+            <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
+              <SelectTrigger style={{ height: 42, padding: "0 16px", borderRadius: 50, border: "1.5px solid #dde8e2", background: "#f8fdfb", fontSize: "0.875rem", fontWeight: 600, color: "#1e1e18", width: 160 }}>
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                {monthOptions.map(m => (
+                  <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {hasWriteAccess() && (
+            <button
+              onClick={() => { setFormData({ points: 0, hours: 0, enrollment_no: "", period: selectedMonth || "" }); setIsAddModalOpen(true); }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: GRN, color: "#fff", fontSize: "0.875rem", fontWeight: 700, cursor: "pointer", border: "none", boxShadow: "0 4px 16px rgba(26,74,52,0.34)", letterSpacing: "0.02em" }}
+            >
+              <Plus size={16} strokeWidth={2.5} /> Add Score
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Leaderboard Table */}
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {loading && <div style={{ display: "flex", justifyContent: "center", padding: "4rem 0" }}><Loader2 style={{ width: 28, height: 28, color: "#1e4a34", animation: "spin 1s linear infinite" }} /></div>}
+        
+        {!loading && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", border: "1.5px solid #e0dbd2", boxShadow: "0 6px 32px rgba(26,74,52,0.09)", borderTop: "3.5px solid #1a3a2a", flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ overflowX: "auto", flex: 1 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "linear-gradient(90deg,#f8f6f1,#fbfaf7)" }}>
+                    <th style={{ padding: "13px 24px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 80 }}>Rank</th>
+                    <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0" }}>Student</th>
+                    <th className="hidden md:table-cell" style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
+                    {viewMode === "cumulative" ? (
+                      <>
+                        <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Total Hours</th>
+                        <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Total Score</th>
+                      </>
+                    ) : (
+                      <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>
+                        {viewMode === 'contributors' ? 'Hours' : 'Score'}
+                      </th>
+                    )}
+                    <th style={{ padding: "13px 24px", textAlign: "center", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 100 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <AnimatePresence mode="wait">
+                    {paged.map((s, i) => {
+                      const rank = (currentPage - 1) * PG + i;
+                      const metric = viewMode === 'contributors' ? (s.hours || 0) : s.points;
+                      
+                      return (
+                        <motion.tr key={s.enrollment_no} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: i * 0.02, duration: 0.2 }}
+                          style={{ borderBottom: "1px solid #f4f1eb", transition: "background 0.15s" }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "linear-gradient(90deg,#f5f3ee,#faf9f6)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                          
+                          <td style={{ padding: "12px 24px" }}>
+                            {rank < 3 ? (
+                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, background: rank === 0 ? "#fff3cc" : rank === 1 ? "#f0f0f0" : "#ffeadb", border: `1px solid ${rank === 0 ? "#f0d060" : rank === 1 ? "#d0d0d0" : "#f0b080"}` }}>
+                                <Trophy size={14} color={rank === 0 ? "#b08000" : rank === 1 ? "#606060" : "#a05020"} />
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#8a7e72", marginLeft: 8 }}>#{rank + 1}</span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: "12px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <StudentAvatar name={s.name} enrollmentNo={s.enrollment_no} photoUrl={s.photo_url} className="w-10 h-10" />
+                              <div>
+                                <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#18180e", lineHeight: 1.3, margin: 0 }}>{s.name}</p>
+                                <p style={{ fontSize: "0.72rem", color: "#b0a898", lineHeight: 1.3, margin: 0 }}>{s.enrollment_no}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="hidden md:table-cell" style={{ padding: "12px 16px" }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{s.batch || "N/A"}</span>
+                          </td>
+
+                          {viewMode === "cumulative" ? (
+                            <>
+                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#18180e" }}>{s.hours || 0}h</span>
+                              </td>
+                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{s.points}</span>
+                              </td>
+                            </>
+                          ) : (
+                            <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                              <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{metric}</span>
+                            </td>
+                          )}
+
+                          <td style={{ padding: "12px 24px", textAlign: "center" }}>
+                            {hasWriteAccess() && (
+                              <button onClick={() => handleEditClick(s)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #c8d8c0", background: "#edf6f0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "#d4ecdc")} onMouseLeave={e => (e.currentTarget.style.background = "#edf6f0")}>
+                                <Pencil size={13} color="#1e5c42" />
+                              </button>
+                            )}
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div style={{ padding: "13px 24px", borderTop: "1px solid #f4f1eb", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fbfaf7", borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
+              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#8a7e72", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                Showing {(currentPage - 1) * PG + 1}–{Math.min(currentPage * PG, scores.length)} of {scores.length}
+              </span>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === 1 ? 0.4 : 1 }}><ChevronLeft size={16} /></button>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {Array.from({ length: Math.ceil(scores.length / PG) }, (_, i) => i + 1).map(p => (
+                    <button key={p} onClick={() => setCurrentPage(p)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: currentPage === p ? GRN : "#fff", color: currentPage === p ? "#fff" : "#6a6050", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", transition: "0.2s" }}>{p}</button>
+                  ))}
                 </div>
-                <div className="w-full md:w-32 space-y-2">
-                  <label className="text-sm font-bold text-[#8B735B]">Points</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={newScorePoints}
-                    onChange={(e) => setNewScorePoints(Number(e.target.value))}
-                    className="w-full border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm text-[#8B735B] font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleAddScore}
-                    className="px-4 py-2 bg-teal-700 text-white rounded-full text-sm font-bold hover:bg-teal-800 transition-colors shadow-sm"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setIsAddingScore(false)}
-                    className="px-4 py-2 bg-stone-100 text-stone-600 rounded-full text-sm font-semibold hover:bg-stone-200 transition-colors border border-stone-200"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(scores.length / PG), p + 1))} disabled={currentPage === Math.ceil(scores.length / PG)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === Math.ceil(scores.length / PG) ? 0.4 : 1 }}><ChevronRight size={16} /></button>
               </div>
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </div>
 
-
-
-      {/* Leaderboard */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex gap-6 items-start"
-      >
-        <div className="max-w-full flex-1">
-          <div className="glass-card rounded-2xl overflow-hidden">
-            <div className="px-5 py-2 border-b-2 border-[#EAD8C0]/50 bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30">
-              <h2 className="flex items-center gap-2 text-xs font-bold text-[#8B735B] uppercase tracking-widest">
-                <Trophy className="w-3.5 h-3.5 text-[#f97316]" /> Scores
-                {selectedMonth && ` - ${selectedMonth}`}
-              </h2>
+      {/* Modals */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-md" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
+          <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>Edit Score Record</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "#f8f6f1", borderRadius: 12, border: "1px solid #ede8e0" }}>
+              <StudentAvatar name={editingScore?.name || ""} photoUrl={editingScore?.photo_url} className="w-12 h-12" />
+              <div>
+                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#18180e", margin: 0 }}>{editingScore?.name}</p>
+                <p style={{ fontSize: "0.75rem", color: "#8a7e72", margin: 0 }}>{editingScore?.enrollment_no}</p>
+              </div>
             </div>
+<<<<<<< Updated upstream
             <div className="flex border-b border-[#EAD8C0]/30 bg-[#FAF7F2]/50 px-3 sm:px-5 py-2 gap-3 sm:gap-8">
               <span className="flex-1 text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Student</span>
               <span className="w-14 sm:w-20 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Marks</span>
@@ -562,12 +486,35 @@ export default function Scores() {
                   </div>
                 </>
               )}
+=======
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Academic Points</Label><Input type="number" value={formData.points} onChange={e => setFormData({ ...formData, points: Number(e.target.value) })} className="rounded-xl" /></div>
+              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Dedicated Hours</Label><Input type="number" value={formData.hours} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="rounded-xl" /></div>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <button onClick={handleDelete} disabled={isSaving} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 12, background: "#fde8ec", border: "1.5px solid #f4b8c0", color: "#c0363a", cursor: "pointer" }}><Trash2 size={18} /></button>
+              <Button variant="outline" className="rounded-xl" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+              <Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleUpdate} disabled={isSaving}>{isSaving ? "Saving..." : "Save Changes"}</Button>
+>>>>>>> Stashed changes
             </div>
           </div>
-        </div>
-        <div className="hidden lg:flex flex-col items-end justify-center pt-36 pr-12 flex-[0.3]">
-          <img src="/Score1.jpg" alt="Scores" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />        </div>
-      </motion.div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-md" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
+          <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>New Score Entry</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Enrollment ID</Label><Input placeholder="24BECE30001" value={formData.enrollment_no} onChange={e => setFormData({ ...formData, enrollment_no: e.target.value })} className="rounded-xl" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Points</Label><Input type="number" value={formData.points} onChange={e => setFormData({ ...formData, points: Number(e.target.value) })} className="rounded-xl" /></div>
+              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Hours</Label><Input type="number" value={formData.hours} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="rounded-xl" /></div>
+            </div>
+            <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Period (Optional)</Label><Input placeholder={selectedMonth || "May 2026"} value={formData.period} onChange={e => setFormData({ ...formData, period: e.target.value })} className="rounded-xl" /></div>
+            <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddModalOpen(false)}>Cancel</Button><Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleAdd} disabled={isSaving}>{isSaving ? "Adding..." : "Add Entry"}</Button></div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
