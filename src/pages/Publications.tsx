@@ -30,7 +30,7 @@ const PUBLICATION_TYPES = [
 
 const PUBLISHERS = [
   "IEEE Xplore",
-  "NASCENT",
+  "VMFRDU",
   "Springer",
   "INDERSCIENCE",
   "Wolters Kluwer",
