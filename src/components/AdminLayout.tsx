@@ -23,6 +23,7 @@ import {
   Award,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -241,7 +242,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Page content */}
-        <main data-scroll-container="app-main" className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+        <main data-scroll-container="app-main" className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
