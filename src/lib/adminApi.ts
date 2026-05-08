@@ -8,7 +8,7 @@ const RAW_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://127.0.0.1:8000/api";
 
-const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "");
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 
 // Get token from localStorage
 const getAuthToken = (): string | null => {
@@ -291,8 +291,13 @@ export const adminAPI = {
   },
 
   // Publication APIs
-  async getPublications() {
-    return apiCall("/admin/publication");
+  // Publication APIs
+  async getPublications(status?: string) {
+    let endpoint = "/admin/publication";
+    if (status) {
+      endpoint += `?status=${status}`;
+    }
+    return apiCall(endpoint);
   },
 
   async getPublication(id: string) {
@@ -310,6 +315,16 @@ export const adminAPI = {
   async deletePublication(id: string) {
     return apiCall(`/admin/publication/${id}`, "DELETE");
   },
+
+  async approvePublication(id: string) {
+    return apiCall(`/admin/publication/${id}/approve`, "PATCH");
+  },
+
+  async rejectPublication(id: string) {
+    return apiCall(`/admin/publication/${id}/reject`, "PATCH");
+  },
+
+
 
   // Join Requests APIs
   async getJoinRequests() {
@@ -386,6 +401,41 @@ export const adminAPI = {
 
   async deleteImage(publicId: string) {
     return apiCall("/admin/delete-image", "POST", { public_id: publicId });
+  },
+
+  // Publisher Symbol / Logo APIs
+  async getPublishers() {
+    return apiCall("/publication-symbol", "GET");
+  },
+
+  async getPublisherLogo(id: number) {
+    return apiCall(`/publication-symbol/${id}`, "GET");
+  },
+
+  async uploadPublisherLogo(publisherName: string, logoFile: File) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const formData = new FormData();
+    formData.append("publisher_name", publisherName);
+    formData.append("logo", logoFile);
+    const response = await fetch(`${API_BASE_URL}/api/publication-symbol/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("Session expired. Please log in again.");
+      }
+      throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
+    }
+    return response.json();
   },
 };
 
