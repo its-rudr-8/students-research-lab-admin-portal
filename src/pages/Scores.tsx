@@ -309,7 +309,7 @@ export default function Scores() {
       {/* Month Selection Filter */}
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-          <h2 className="text-base sm:text-lg font-semibold text-stone-800 shrink-0">
+          <h2 className="text-base sm:text-lg font-bold text-[#8B735B] shrink-0">
             Scores for
           </h2>
           {!canEdit && <p className="text-xs text-muted-foreground sm:ml-2">You have read-only access.</p>}
@@ -318,15 +318,15 @@ export default function Scores() {
             onValueChange={(value) => setSelectedMonth(value || null)}
             disabled={monthOptions.length === 0}
           >
-            <SelectTrigger className="px-3 py-1.5 h-auto rounded-lg border-2 border-yellow-200 bg-yellow-50 text-stone-800 text-sm font-medium w-32 sm:w-auto hover:bg-stone-50 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-200/50">
+            <SelectTrigger className="px-3 py-1.5 h-auto rounded-lg border-2 border-[#EAD8C0] bg-[#FAF7F2] text-[#8B735B] text-sm font-bold w-32 sm:w-auto hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/30">
               <SelectValue placeholder="Select Month" />
             </SelectTrigger>
-            <SelectContent className="bg-yellow-50 border-2 border-yellow-200">
+            <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
               {monthOptions.map((month, index) => (
                 <SelectItem 
                   key={`month-${index}`} 
                   value={month}
-                  className="focus:bg-amber-200 focus:text-amber-900 cursor-pointer text-stone-800 font-medium"
+                  className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer text-[#8B735B] font-medium"
                 >
                   {month}
                 </SelectItem>
@@ -337,7 +337,7 @@ export default function Scores() {
         {canEdit && (
           <button
             onClick={() => setIsAddingScore(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-full text-sm font-bold transition-all shadow-md active:scale-95"
+            className="flex items-center gap-1.5 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-full text-sm font-bold transition-all shadow-md active:scale-95"
           >
             <Plus className="w-4 h-4" />
             Add Score
@@ -354,23 +354,23 @@ export default function Scores() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mb-4 p-4 sm:p-6 border-2 border-yellow-200 rounded-2xl bg-gradient-to-br from-yellow-50/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
+            <div className="mb-4 p-4 sm:p-6 border-2 border-[#EAD8C0]/50 rounded-2xl bg-gradient-to-br from-[#FAF7F2]/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
               <div className="flex flex-col md:flex-row gap-4 md:items-end">
                 <div className="flex-1 space-y-2">
-                  <label className="text-sm font-semibold text-stone-700">Student Enrollment</label>
+                  <label className="text-sm font-bold text-[#8B735B]">Student Enrollment</label>
                   <Select
                     value={newScoreEnrollment}
                     onValueChange={(value) => setNewScoreEnrollment(value)}
                   >
-                    <SelectTrigger className="w-full border-2 border-yellow-200 bg-white px-3 py-2 h-auto rounded-lg text-sm text-stone-700 font-medium focus:outline-none focus:ring-2 focus:ring-yellow-200/50">
+                    <SelectTrigger className="w-full border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 h-auto rounded-lg text-sm text-[#8B735B] font-medium focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/20">
                       <SelectValue placeholder="Select Student" />
                     </SelectTrigger>
-                    <SelectContent className="bg-yellow-50 border-2 border-yellow-200">
+                    <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
                       {cachedStudentsData.map((stu) => (
                         <SelectItem 
                           key={stu.enrollment_no} 
                           value={stu.enrollment_no}
-                          className="focus:bg-amber-200 focus:text-amber-900 cursor-pointer"
+                          className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer"
                         >
                           {stu.student_name} ({stu.enrollment_no})
                         </SelectItem>
@@ -379,19 +379,19 @@ export default function Scores() {
                   </Select>
                 </div>
                 <div className="w-full md:w-32 space-y-2">
-                  <label className="text-sm font-semibold text-stone-700">Points</label>
+                  <label className="text-sm font-bold text-[#8B735B]">Points</label>
                   <input
                     type="number"
                     min="0"
                     value={newScorePoints}
                     onChange={(e) => setNewScorePoints(Number(e.target.value))}
-                    className="w-full border-2 border-yellow-200 bg-white px-3 py-2 rounded-lg text-sm text-stone-700 font-medium focus:outline-none focus:border-stone-700 focus:ring-2 focus:ring-yellow-200/50"
+                    className="w-full border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm text-[#8B735B] font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
                   />
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={handleAddScore}
-                    className="px-4 py-2 bg-teal-800 text-white rounded-full text-sm font-semibold hover:bg-teal-900 transition-colors shadow-sm"
+                    className="px-4 py-2 bg-teal-700 text-white rounded-full text-sm font-bold hover:bg-teal-800 transition-colors shadow-sm"
                   >
                     Save
                   </button>
@@ -418,16 +418,16 @@ export default function Scores() {
       >
         <div className="max-w-full flex-1">
           <div className="glass-card rounded-2xl overflow-hidden">
-            <div className="px-5 py-2 border-b-2 border-yellow-200 bg-gradient-to-r from-yellow-100/40 to-stone-100/30">
-              <h2 className="flex items-center gap-2 text-xs font-bold text-stone-600 uppercase tracking-widest">
-                <Trophy className="w-3.5 h-3.5 text-amber-600" /> Scores
+            <div className="px-5 py-2 border-b-2 border-[#EAD8C0]/50 bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30">
+              <h2 className="flex items-center gap-2 text-xs font-bold text-[#8B735B] uppercase tracking-widest">
+                <Trophy className="w-3.5 h-3.5 text-[#f97316]" /> Scores
                 {selectedMonth && ` - ${selectedMonth}`}
               </h2>
             </div>
-            <div className="flex border-b border-yellow-100/50 bg-yellow-50/50 px-5 py-1.5 gap-8">
-              <span className="flex-1 text-[10px] font-bold text-stone-500 uppercase tracking-wider">Student</span>
-              <span className="w-20 text-center text-[10px] font-bold text-stone-500 uppercase tracking-wider">Marks</span>
-              {canEdit && <span className="w-16 text-center text-[10px] font-bold text-stone-500 uppercase tracking-wider">Edit</span>}
+            <div className="flex border-b border-[#EAD8C0]/30 bg-[#FAF7F2]/50 px-5 py-1.5 gap-8">
+              <span className="flex-1 text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Student</span>
+              <span className="w-20 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Marks</span>
+              {canEdit && <span className="w-16 text-center text-[10px] font-bold text-[#8B735B]/60 uppercase tracking-wider">Edit</span>}
             </div>
             <div className="divide-y divide-yellow-100/50">
               {loading ? (
@@ -447,18 +447,18 @@ export default function Scores() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ layout: { duration: 0.3 } }}
-                        className={`flex items-center gap-8 px-5 py-1.5 border-b border-yellow-100/50 hover:bg-green-50/60 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-yellow-100/30'}`}
+                        className={`flex items-center gap-8 px-5 py-1.5 border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${i % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}
                       >
                         <StudentAvatar
                           name={student.name}
                           enrollmentNo={student.enrollment_no}
                           photoUrl={student.photo_url}
                           className="w-8 h-8 shrink-0 ml-1"
-                          fallbackClassName="bg-yellow-100 text-amber-800 text-[10px] font-medium"
+                          fallbackClassName="bg-[#EAD8C0]/30 text-[#8B735B] text-[10px] font-medium"
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-stone-800">{student.name}</p>
-                          <p className="text-xs text-stone-600">{student.enrollment_no}</p>
+                          <p className="text-sm font-bold text-[#8B735B]">{student.name}</p>
+                          <p className="text-xs text-[#8B735B]/70">{student.enrollment_no}</p>
                         </div>
 
                         <div className="w-20 flex justify-center">
@@ -468,16 +468,16 @@ export default function Scores() {
                               min="0"
                               value={editValue}
                               onChange={(e) => setEditValue(Number(e.target.value))}
-                              className="w-16 border-2 border-amber-200 px-1 py-0.5 rounded text-xs text-center font-bold focus:outline-none focus:border-amber-500"
+                              className="w-16 border-2 border-[#EAD8C0] px-1 py-0.5 rounded text-xs text-center font-bold focus:outline-none focus:border-[#8B735B]"
                               autoFocus
                             />
                           ) : (
                             <motion.span
                               key={student.points}
-                              initial={{ scale: 1.15, color: "hsl(var(--primary))" }}
-                              animate={{ scale: 1, color: "hsl(var(--foreground))" }}
+                              initial={{ scale: 1.15, color: "#8B735B" }}
+                              animate={{ scale: 1, color: "#8B735B" }}
                               transition={{ duration: 0.2 }}
-                              className="font-mono text-sm font-bold text-stone-800 bg-amber-50 px-2 py-0.5 rounded"
+                              className="font-mono text-sm font-bold text-[#8B735B] bg-[#EAD8C0]/30 px-2 py-0.5 rounded"
                             >
                               {student.points}
                             </motion.span>
@@ -490,14 +490,14 @@ export default function Scores() {
                               <>
                                 <button
                                   onClick={() => handleUpdateScore(student.id, editValue)}
-                                  className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+                                  className="p-1 text-green-700 hover:bg-green-100 rounded transition-colors"
                                   title="Save"
                                 >
                                   <Check className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => setEditingId(null)}
-                                  className="p-1 text-red-600 hover:bg-red-100 rounded transition-colors"
+                                  className="p-1 text-red-700 hover:bg-red-100 rounded transition-colors"
                                   title="Cancel"
                                 >
                                   <X className="w-3.5 h-3.5" />
@@ -509,7 +509,7 @@ export default function Scores() {
                                   setEditingId(student.id);
                                   setEditValue(student.points);
                                 }}
-                                className="p-1 text-muted-foreground hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                                className="p-1 text-muted-foreground hover:text-[#8B735B] hover:bg-[#EAD8C0]/20 rounded transition-colors"
                                 title="Edit"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
@@ -522,7 +522,7 @@ export default function Scores() {
                   </AnimatePresence>
 
                   {/* Footer with Pagination and Add Score */}
-                  <div className="flex items-center justify-between px-4 py-3 border-t border-yellow-200/20 bg-yellow-100/15">
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-[#EAD8C0]/20 bg-[#FAF7F2]/50">
                     <div className="text-sm text-muted-foreground hidden sm:block">
                       Showing {Math.min((currentPage - 1) * itemsPerPage + 1, scores.length)}-{Math.min(currentPage * itemsPerPage, scores.length)} of {scores.length}
                     </div>
@@ -539,8 +539,8 @@ export default function Scores() {
                           key={page}
                           onClick={() => setCurrentPage(page)}
                           className={`px-2 py-1 rounded text-sm ${currentPage === page
-                              ? 'bg-amber-600 text-white font-bold'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-yellow-200/30'
+                              ? 'bg-teal-700 text-white font-bold'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-[#EAD8C0]/20'
                             }`}
                         >
                           {page}
@@ -565,8 +565,8 @@ export default function Scores() {
             </div>
           </div>
         </div>
-        <div className="hidden lg:flex flex-col items-end justify-center pt-24 pr-12 flex-[0.3]">
-          <img src="/Score1.jpg" alt="Scores" className="max-w-sm rounded-lg shadow-[0_0_40px_rgba(217,169,102,0.8)] border-4 border-amber-200" />        </div>
+        <div className="hidden lg:flex flex-col items-end justify-center pt-36 pr-12 flex-[0.3]">
+          <img src="/Score1.jpg" alt="Scores" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />        </div>
       </motion.div>
     </div>
   );

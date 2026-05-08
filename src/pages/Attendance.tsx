@@ -212,7 +212,7 @@ export default function Attendance() {
       </div>
       {!canEdit && <p className="text-xs text-muted-foreground">You have read-only access. Only admin can add attendance.</p>}
       {showAddForm && (
-        <form onSubmit={handleAddAttendance} className="mb-4 p-4 sm:p-6 border-2 border-yellow-200 rounded-2xl bg-gradient-to-br from-yellow-50/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
+        <form onSubmit={handleAddAttendance} className="mb-4 p-4 sm:p-6 border-2 border-[#EAD8C0]/50 rounded-2xl bg-gradient-to-br from-[#FAF7F2]/30 to-stone-50/20 flex flex-col gap-4 max-w-4xl mx-auto w-full glass-card">
           <div className="flex flex-col md:flex-row gap-4 md:items-center">
             <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
               <label htmlFor="attendance-date" className="font-semibold text-sm text-stone-700 shrink-0">Date:</label>
@@ -221,7 +221,7 @@ export default function Attendance() {
                   <Button
                     variant={"outline"}
                     className={cn(
-                      "calendar-beige border-2 border-yellow-200 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium justify-between text-left",
+                      "calendar-beige border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium justify-between text-left",
                       !addDate && "text-muted-foreground"
                     )}
                   >
@@ -235,12 +235,12 @@ export default function Attendance() {
                     selected={addDate ? new Date(addDate) : undefined}
                     onSelect={(date) => setAddDate(date ? format(date, "yyyy-MM-dd") : "")}
                     initialFocus
-                    className="bg-yellow-50 border-2 border-yellow-200 rounded-xl"
+                    className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-xl"
                     classNames={{
-                      day_selected: "!bg-amber-200 !text-amber-900 hover:!bg-amber-300 focus:!bg-amber-200",
-                      day_today: "bg-stone-100 text-stone-900 font-bold border border-amber-200",
-                      day: "hover:!bg-amber-100 rounded-md transition-colors",
-                      head_cell: "text-amber-800 font-bold",
+                      day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                      day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                      day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                      head_cell: "text-[#8B735B] font-bold",
                       cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
                     }}
                   />
@@ -256,22 +256,22 @@ export default function Attendance() {
                 placeholder="Search by student name..."
                 value={searchName}
                 onChange={e => setSearchName(e.target.value)}
-                className="border-2 border-yellow-200 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium focus:outline-none focus:border-stone-700 focus:ring-2 focus:ring-yellow-200/50"
+                className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
               />
             </div>
           </div>
           <div className="overflow-x-auto max-h-96 -mx-4 sm:-mx-6 px-4 sm:px-6">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gradient-to-r from-yellow-100/40 to-stone-100/30 border-b-2 border-yellow-200">
-                  <th className="text-left px-4 py-3 text-stone-700 font-bold">Student</th>
-                  <th className="text-center px-4 py-3 text-stone-700 font-bold">Enrollment No.</th>
-                  <th className="text-center px-4 py-3 text-stone-700 font-bold">Hours</th>
+                <tr className="bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30 border-b-2 border-[#EAD8C0]/50">
+                  <th className="text-left px-4 py-3 text-[#8B735B] font-bold">Student</th>
+                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Enrollment No.</th>
+                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Hours</th>
                 </tr>
               </thead>
               <tbody>
                 {students.filter(student => student.name.toLowerCase().includes(searchName.toLowerCase())).map((student, idx) => (
-                  <tr key={student.enrollment_no} className={`border-b border-yellow-100/50 hover:bg-green-50/60 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-yellow-100/30'}`}>
+                  <tr key={student.enrollment_no} className={`border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}>
                     <td className="px-4 py-3 text-stone-700 font-medium">{student.name}</td>
                     <td className="px-4 py-3 text-center text-stone-600 font-mono text-xs">{student.enrollment_no}</td>
                     <td className="px-4 py-3 text-center">
@@ -283,7 +283,7 @@ export default function Attendance() {
                         min="0"
                         value={addHours[student.enrollment_no] || ""}
                         onChange={e => setAddHours({ ...addHours, [student.enrollment_no]: e.target.value })}
-                        className="border-2 border-yellow-200 bg-white px-2 py-2 rounded-md w-28 text-center text-stone-700 font-medium focus:outline-none focus:border-stone-700 focus:ring-2 focus:ring-yellow-200/50"
+                        className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-28 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
                         placeholder="0.0"
                       />
                     </td>
@@ -294,10 +294,10 @@ export default function Attendance() {
           </div>
           {addError && <div className="text-red-700 text-sm mt-2 p-2 bg-red-50 rounded-md border border-red-300">{addError}</div>}
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={adding} className="bg-teal-800 hover:bg-teal-900 text-white font-semibold py-2 rounded-lg transition-colors flex-1">
+            <Button type="submit" disabled={adding} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-2 rounded-lg transition-colors flex-1">
               {adding ? "Adding..." : "Submit Attendance"}
             </Button>
-            <Button type="button" onClick={() => setShowAddForm(false)} className="bg-teal-800 hover:bg-teal-900 text-white font-semibold py-2 rounded-lg transition-colors">
+            <Button type="button" onClick={() => setShowAddForm(false)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 font-semibold py-2 rounded-lg transition-colors">
               Close
             </Button>
           </div>
@@ -323,17 +323,17 @@ export default function Attendance() {
           value={attendanceDate || ''}
           onValueChange={(value) => setAttendanceDate(value)}
         >
-          <SelectTrigger className="px-3 py-1.5 h-auto rounded border-2 border-yellow-300 bg-yellow-50 text-stone-800 text-sm font-medium w-32 sm:w-auto hover:bg-stone-50 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-300/50">
+          <SelectTrigger className="px-3 py-1.5 h-auto rounded border-2 border-[#EAD8C0] bg-[#FAF7F2] text-stone-800 text-sm font-medium w-32 sm:w-auto hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/30">
             <SelectValue placeholder="Select Date" />
           </SelectTrigger>
-          <SelectContent className="bg-yellow-50 border-2 border-yellow-300 max-h-60 overflow-y-auto">
+          <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0] max-h-60 overflow-y-auto">
             {allDates.map((date, index) => {
               const displayDate = formatDateToISO(date) || 'Invalid date';
               return (
                 <SelectItem
                   key={`date-${index}`}
                   value={date}
-                  className="focus:bg-amber-200 focus:text-amber-900 cursor-pointer text-stone-800 font-medium"
+                  className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer text-stone-800 font-medium"
                 >
                   {displayDate}
                 </SelectItem>
@@ -351,10 +351,10 @@ export default function Attendance() {
               ) : (
                 <div className="w-full">
                   {/* Header Row */}
-                  <div className="flex border-b border-yellow-300/30 bg-yellow-400/30">
-                    <div className="flex-1 text-left text-xs font-medium text-yellow-900/60 uppercase tracking-wider py-2 px-2">Student</div>
-                    <div className="flex-1 text-center text-xs font-medium text-yellow-900/60 uppercase tracking-wider py-2 px-2">Present</div>
-                    <div className="flex-1 text-center text-xs font-medium text-yellow-900/60 uppercase tracking-wider py-2 px-2">Hours</div>
+                  <div className="flex border-b border-[#EAD8C0]/50 bg-[#EAD8C0]/40">
+                    <div className="flex-1 text-left text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Student</div>
+                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Present</div>
+                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Hours</div>
                   </div>
                   {/* Data Rows */}
                   {students.length === 0 ? (
@@ -367,14 +367,14 @@ export default function Attendance() {
                       return paginatedStudents.map((student, i) => {
                         const present = student.hours !== 0;
                         return (
-                          <motion.div key={student.enrollment_no} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="flex border-b border-yellow-200/20 last:border-0 hover:bg-green-50/60 transition-colors">
+                          <motion.div key={student.enrollment_no} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="flex border-b border-[#EAD8C0]/20 last:border-0 hover:bg-[#EAD8C0]/5 transition-colors">
                             <div className="flex-1 py-2 px-2 bg-white flex items-center gap-1">
                               <StudentAvatar
                                 name={student.name}
                                 enrollmentNo={student.enrollment_no}
                                 photoUrl={student.photo_url}
                                 className="w-7 h-7"
-                                fallbackClassName="bg-yellow-100 text-yellow-700 text-[10px] font-medium"
+                                fallbackClassName="bg-[#EAD8C0]/30 text-[#8B735B] text-[10px] font-medium"
                               />
                               <span className="text-sm font-medium text-foreground">{student.name}</span>
                             </div>
@@ -386,7 +386,7 @@ export default function Attendance() {
                               )}
                             </div>
                             <div className="flex-1 py-2 px-2 text-center">
-                              <span className="inline-block bg-yellow-100 px-2 py-0.5 rounded text-sm font-medium text-yellow-800">{Number(student.hours).toFixed(1)}</span>
+                              <span className="inline-block bg-[#EAD8C0]/30 px-2 py-0.5 rounded text-sm font-bold text-[#8B735B]">{Number(student.hours).toFixed(1)}</span>
                             </div>
                           </motion.div>
                         );
@@ -395,7 +395,7 @@ export default function Attendance() {
                   )}
                   {/* Footer with Pagination */}
                   {students.length > 0 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-yellow-200/20 bg-yellow-100/15">
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-[#EAD8C0]/20 bg-[#FAF7F2]/50">
                       <div className="text-sm text-muted-foreground">
                         Showing {Math.min((currentPage - 1) * itemsPerPage + 1, students.length)}-{Math.min(currentPage * itemsPerPage, students.length)} of {students.length}
                       </div>
@@ -412,7 +412,7 @@ export default function Attendance() {
                             key={page}
                             onClick={() => setCurrentPage(page)}
                             className={`px-2 py-1 rounded ${currentPage === page
-                              ? 'bg-amber-600 text-white'
+                              ? 'bg-teal-700 text-white'
                               : 'text-muted-foreground hover:text-foreground'
                               }`}
                           >
@@ -438,7 +438,7 @@ export default function Attendance() {
           </div>
         </div>
         <div className="flex flex-col items-center justify-start pt-20 pr-10">
-          <img src="/Attendance.jpg" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_40px_rgba(217,169,102,0.8)] border-4 border-amber-200" />
+          <img src="/Attendance.jpg" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />
         </div>
       </motion.div>
     </div>

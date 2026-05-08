@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Edit, Trash2, Calendar, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,14 @@ import { useToast } from "@/hooks/use-toast";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface Activity {
   id: string | number;
@@ -57,7 +65,7 @@ export default function Activities() {
     try {
       setLoading(true);
       const response = await adminAPI.getActivities();
-      
+
       if (response.success && Array.isArray(response.data)) {
         setActivities(response.data.sort((a, b) => {
           const dateA = new Date(a.date || 0).getTime();
@@ -245,57 +253,86 @@ export default function Activities() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#8B735B]" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 sm:space-y-5 max-w-4xl">
+    <div className="space-y-4 sm:space-y-5 max-w-7xl">
       {canEdit && (
         <div className="flex justify-start sm:justify-end">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="rounded-xl gap-1.5 text-sm sm:text-base">
+              <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white rounded-xl gap-1.5 text-sm sm:text-base font-bold shadow-md">
                 <Plus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Add Activity</span><span className="sm:hidden">Add</span>
               </Button>
             </DialogTrigger>
-            <DialogContent className="rounded-2xl sm:max-w-md">
-              <DialogHeader><DialogTitle>Add Activity / Event</DialogTitle></DialogHeader>
+            <DialogContent className="rounded-3xl sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl
+              [&::-webkit-scrollbar]:w-2
+              [&::-webkit-scrollbar-track]:bg-transparent
+              [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+              [&::-webkit-scrollbar-thumb]:rounded-full
+              hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]">
+              <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Add Activity / Event</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-1.5">
-                  <Label>Title *</Label>
-                  <Input 
-                    placeholder="Event title" 
-                    className="rounded-xl"
+                  <Label className="text-[#8B735B] font-bold">Title *</Label>
+                  <Input
+                    placeholder="Event title"
+                    className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Category</Label>
-                  <Input 
-                    placeholder="e.g. Workshop, Seminar" 
-                    className="rounded-xl"
+                  <Label className="text-[#8B735B] font-bold">Category</Label>
+                  <Input
+                    placeholder="e.g. Workshop, Seminar"
+                    className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Date</Label>
-                  <Input 
-                    type="date" 
-                    className="rounded-xl"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  />
+                  <Label className="text-[#8B735B] font-bold">Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
+                          !formData.date && "text-muted-foreground"
+                        )}
+                      >
+                        {formData.date ? format(new Date(formData.date), "do MMMM yyyy") : <span>Pick a date</span>}
+                        <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
+                      <Calendar
+                        mode="single"
+                        selected={formData.date ? new Date(formData.date) : undefined}
+                        onSelect={(date) => setFormData({ ...formData, date: date ? format(date, "yyyy-MM-dd") : "" })}
+                        initialFocus
+                        className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left"
+                        classNames={{
+                          day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                          day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                          day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                          head_cell: "text-[#8B735B] font-bold w-7",
+                          cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Hours</Label>
-                  <Input 
-                    type="number" 
-                    placeholder="e.g. 2" 
-                    className="rounded-xl"
+                  <Label className="text-[#8B735B] font-bold">Hours</Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 2"
+                    className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     value={formData.hours}
                     onChange={(e) => setFormData({ ...formData, hours: e.target.value })}
                   />
@@ -306,18 +343,18 @@ export default function Activities() {
                   currentImage={formData.Photo}
                 />
                 <div className="space-y-1.5">
-                  <Label>Description</Label>
-                  <Textarea 
-                    placeholder="Describe the event..." 
-                    className="rounded-xl resize-none" 
+                  <Label className="text-[#8B735B] font-bold">Description</Label>
+                  <Textarea
+                    placeholder="Describe the event..."
+                    className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     rows={3}
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button className="rounded-xl" onClick={handleAddActivity}>Create</Button>
+                  <Button variant="outline" className="rounded-xl border-[#EAD8C0] text-[#8B735B] hover:bg-[#EAD8C0]/20" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button className="rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold" onClick={handleAddActivity}>Create</Button>
                 </div>
               </div>
             </DialogContent>
@@ -335,42 +372,71 @@ export default function Activities() {
             }
           }}
         >
-          <DialogContent className="rounded-2xl sm:max-w-md">
-            <DialogHeader><DialogTitle>Edit Activity / Event</DialogTitle></DialogHeader>
+          <DialogContent className="rounded-3xl sm:max-w-md max-h-[90vh] overflow-y-auto bg-[#FAF7F2] border-[#EAD8C0]/50 shadow-2xl
+            [&::-webkit-scrollbar]:w-2
+            [&::-webkit-scrollbar-track]:bg-transparent
+            [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+            [&::-webkit-scrollbar-thumb]:rounded-full
+            hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]">
+            <DialogHeader><DialogTitle className="text-[#8B735B] font-bold">Edit Activity / Event</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-1.5">
-                <Label>Title *</Label>
+                <Label className="text-[#8B735B] font-bold">Title *</Label>
                 <Input
                   placeholder="Event title"
-                  className="rounded-xl"
+                  className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                   value={editFormData.title}
                   onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Category</Label>
+                <Label className="text-[#8B735B] font-bold">Category</Label>
                 <Input
                   placeholder="e.g. Workshop, Seminar"
-                  className="rounded-xl"
+                  className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                   value={editFormData.category}
                   onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  className="rounded-xl"
-                  value={editFormData.date}
-                  onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
-                />
+                <Label className="text-[#8B735B] font-bold">Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
+                        !editFormData.date && "text-muted-foreground"
+                      )}
+                    >
+                      {editFormData.date ? format(new Date(editFormData.date), "do MMMM yyyy") : <span>Pick a date</span>}
+                      <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
+                    <Calendar
+                      mode="single"
+                      selected={editFormData.date ? new Date(editFormData.date) : undefined}
+                      onSelect={(date) => setEditFormData({ ...editFormData, date: date ? format(date, "yyyy-MM-dd") : "" })}
+                      initialFocus
+                      className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left"
+                      classNames={{
+                        day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                        day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                        day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                        head_cell: "text-[#8B735B] font-bold w-7",
+                        cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-1.5">
-                <Label>Hours</Label>
+                <Label className="text-[#8B735B] font-bold">Hours</Label>
                 <Input
                   type="number"
                   placeholder="e.g. 2"
-                  className="rounded-xl"
+                  className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                   value={editFormData.hours}
                   onChange={(e) => setEditFormData({ ...editFormData, hours: e.target.value })}
                 />
@@ -381,74 +447,114 @@ export default function Activities() {
                 currentImage={editFormData.Photo}
               />
               <div className="space-y-1.5">
-                <Label>Description</Label>
+                <Label className="text-[#8B735B] font-bold">Description</Label>
                 <Textarea
                   placeholder="Describe the event..."
-                  className="rounded-xl resize-none"
+                  className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                   rows={3}
                   value={editFormData.description}
                   onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" className="rounded-xl" onClick={() => setEditOpen(false)}>Cancel</Button>
-                <Button className="rounded-xl" onClick={handleUpdateActivity}>Update</Button>
+                <Button variant="outline" className="rounded-xl border-[#EAD8C0] text-[#8B735B] hover:bg-[#EAD8C0]/20" onClick={() => setEditOpen(false)}>Cancel</Button>
+                <Button className="rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold" onClick={handleUpdateActivity}>Update</Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Activities List */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="glass-card rounded-2xl overflow-hidden"
-      >
-        {activities.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground text-sm">
-            No activities found.
-          </div>
-        ) : (
-          <div className="space-y-2 p-4">
-            {activities.map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-border/50 hover:bg-muted/30 transition-colors"
-              >
-                <div className="flex items-center gap-3 flex-1">
-                  <Calendar className="w-4 h-4 text-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground truncate">{activity.title}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(activity.date)}</p>
+      {/* Activities List & Image */}
+      <div className="flex flex-col lg:flex-row gap-8 items-start">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex-1 w-full bg-[#FAF7F2]/60 backdrop-blur-sm rounded-[32px] border-2 border-[#EAD8C0]/50 shadow-xl overflow-hidden"
+        >
+          {!canEdit && <p className="text-[10px] text-muted-foreground p-4 text-center">You have read-only access. Only admin can manage activities.</p>}
+
+          {activities.length === 0 ? (
+            <div className="text-center py-20 text-muted-foreground font-medium">
+              <Calendar className="w-12 h-12 mx-auto text-[#EAD8C0] mb-4 opacity-50" />
+              No activities found.
+            </div>
+          ) : (
+            <div className="p-3 sm:p-6 space-y-3 max-h-[500px] overflow-y-auto
+              [&::-webkit-scrollbar]:w-2
+              [&::-webkit-scrollbar-track]:bg-transparent
+              [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+              [&::-webkit-scrollbar-thumb]:rounded-full
+              hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]">
+              {activities.map((activity) => (
+                <motion.div
+                  key={activity.id}
+                  whileHover={{ scale: 1.01 }}
+                  className="flex items-center justify-between p-4 rounded-2xl bg-white border border-[#EAD8C0]/30 shadow-sm hover:shadow-md hover:border-[#EAD8C0] transition-all group"
+                >
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-[#FAF7F2] flex items-center justify-center text-[#8B735B] border border-[#EAD8C0]/40 group-hover:bg-[#EAD8C0]/20 transition-colors">
+                      <CalendarIcon className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-[#8B735B] truncate text-base sm:text-lg">{activity.title}</p>
+                      <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
+                        <span>{formatDate(activity.date)}</span>
+                        {activity.category && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-[#EAD8C0]" />
+                            <span className="text-[#8B735B]/80">{activity.category}</span>
+                          </>
+                        )}
+                        {activity.hours && (
+                          <>
+                            <span className="w-1 h-1 rounded-full bg-[#EAD8C0]" />
+                            <span className="text-[#8B735B]/80">{activity.hours} Hours</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                {canEdit && (
-                  <div className="flex gap-2 ml-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleStartEdit(activity)}
-                      className="rounded-lg"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteActivity(activity.id)}
-                      className="rounded-lg text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </motion.div>
+                  {canEdit && (
+                    <div className="flex gap-2 ml-4">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleStartEdit(activity)}
+                        className="h-9 w-9 rounded-xl hover:bg-[#EAD8C0]/20 text-[#8B735B]"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteActivity(activity.id)}
+                        className="h-9 w-9 rounded-xl text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="hidden lg:flex flex-col items-center justify-start pt-24 sticky top-20"
+        >
+          <img
+            src="/Activity.jpg"
+            alt="Activities"
+            className="max-w-[320px] rounded-3xl shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500"
+          />
+        </motion.div>
+      </div>
     </div>
   );
 }
