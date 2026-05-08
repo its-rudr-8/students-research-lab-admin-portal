@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { Loader2, Pencil, Plus, Trash2, BookOpen, Calendar as CalendarIcon, ExternalLink, Users, Building2, Landmark, GraduationCap } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, BookOpen, Calendar as CalendarIcon, ExternalLink, Users, Building2, Landmark, GraduationCap, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,18 @@ const PUBLICATION_TYPES = [
   { label: "Journal", value: "journal" },
   { label: "Book Chapter", value: "book chapter" },
   { label: "Patent", value: "patent" },
+  { label: "Poster", value: "poster" },
+  { label: "Research Artical", value: "research artical" },
+];
+
+const PUBLISHERS = [
+  "IEEE Xplore",
+  "NASCENT",
+  "Springer",
+  "INDERSCIENCE",
+  "Wolters Kluwer",
+  "CEUR Workshop Proceedings",
+  "Other",
 ];
 
 interface Publication {
@@ -46,6 +58,7 @@ interface Publication {
   category?: string;
   created_at?: string;
   year?: number;
+  publisher_photo?: string;
 }
 
 export default function Publications() {
@@ -70,6 +83,7 @@ export default function Publications() {
     description: "",
     category: "",
     year: new Date().getFullYear(),
+    publisher_photo: "",
   });
   const [editFormData, setEditFormData] = useState({
     title: "",
@@ -85,13 +99,62 @@ export default function Publications() {
     description: "",
     category: "",
     year: new Date().getFullYear(),
+    publisher_photo: "",
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
 
   useEffect(() => {
     fetchPublications();
   }, []);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: "Image size should be less than 10MB",
+      });
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      const uploadData = new FormData();
+      uploadData.append("image", file);
+      
+      const response = await adminAPI.uploadImage(uploadData);
+      
+      if (response.success || response.url) {
+        const imageUrl = response.url || response.data?.url;
+        if (isEdit) {
+          setEditFormData(prev => ({ ...prev, publisher_photo: imageUrl }));
+        } else {
+          setFormData(prev => ({ ...prev, publisher_photo: imageUrl }));
+        }
+        toast({
+          title: "Success",
+          description: "Image uploaded successfully",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Upload failed",
+        description: error.message || "Failed to upload image",
+      });
+    } finally {
+      setUploadingImage(false);
+      // Clear the input value so the same file can be selected again
+      e.target.value = "";
+    }
+  };
 
   const fetchPublications = async () => {
     try {
@@ -153,6 +216,7 @@ export default function Publications() {
         description: formData.description.trim() || null,
         category: formData.category.trim() || null,
         year: formData.year || new Date().getFullYear(),
+        publisher_photo: formData.publisher_photo || null,
       };
 
       const response = await adminAPI.createPublication(payload);
@@ -177,6 +241,7 @@ export default function Publications() {
           description: "",
           category: "",
           year: new Date().getFullYear(),
+          publisher_photo: "",
         });
         fetchPublications();
       }
@@ -244,6 +309,7 @@ export default function Publications() {
       description: publication.description || "",
       category: publication.category || "",
       year: publication.year || new Date().getFullYear(),
+      publisher_photo: publication.publisher_photo || "",
     });
     setEditOpen(true);
   };
@@ -283,6 +349,7 @@ export default function Publications() {
         description: editFormData.description.trim() || null,
         category: editFormData.category.trim() || null,
         year: editFormData.year || new Date().getFullYear(),
+        publisher_photo: editFormData.publisher_photo || null,
       };
 
       const response = await adminAPI.updatePublication(editingPublication.id, payload);
@@ -352,7 +419,7 @@ export default function Publications() {
                     </SelectTrigger>
                     <SelectContent className="bg-white border-[#EAD8C0]">
                       {PUBLICATION_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value} className="focus:bg-[#EAD8C0]/20 text-[#8B735B]">
+                        <SelectItem key={type.value} value={type.value} className="focus:bg-[#8B735B] focus:text-white text-[#8B735B] cursor-pointer">
                           {type.label}
                         </SelectItem>
                       ))}
@@ -432,13 +499,71 @@ export default function Publications() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[#8B735B] font-bold">Publisher</Label>
-                  <Input
-                    placeholder="Publisher name"
-                    className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
-                    value={formData.publisher}
-                    onChange={(e) => setFormData({ ...formData, publisher: e.target.value })}
-                  />
+                  <Select value={formData.publisher} onValueChange={(value) => setFormData({ ...formData, publisher: value })}>
+                    <SelectTrigger className="rounded-xl border-[#EAD8C0]/40 bg-white focus:ring-[#EAD8C0]">
+                      <SelectValue placeholder="Select publisher" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-[#EAD8C0]">
+                      {PUBLISHERS.map((publisher) => (
+                        <SelectItem key={publisher} value={publisher} className="focus:bg-[#8B735B] focus:text-white text-[#8B735B] cursor-pointer">
+                          {publisher}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+                {formData.publisher === "Other" && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <Label className="text-[#8B735B] font-bold">Publisher Photo</Label>
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        "border-2 border-dashed border-[#EAD8C0] rounded-2xl p-8 flex flex-col items-center justify-center bg-white/50 hover:bg-white hover:border-teal-600/50 transition-all cursor-pointer group relative overflow-hidden min-h-[200px]",
+                        uploadingImage && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {uploadingImage ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-8 h-8 animate-spin text-[#8B735B]" />
+                          <p className="text-xs font-medium text-[#8B735B]">Uploading image...</p>
+                        </div>
+                      ) : formData.publisher_photo ? (
+                        <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border border-[#EAD8C0]/30">
+                          <img src={formData.publisher_photo} alt="Publisher" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <p className="text-white text-xs font-bold">Change Image</p>
+                          </div>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFormData(prev => ({ ...prev, publisher_photo: "" }));
+                            }}
+                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-md z-10"
+                            title="Remove image"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="w-12 h-12 rounded-full bg-[#FAF7F2] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <Upload className="w-6 h-6 text-[#8B735B]" />
+                          </div>
+                          <p className="text-sm font-bold text-[#8B735B]">Click to upload or drag and drop</p>
+                          <p className="text-[11px] text-[#8B735B]/60 mt-1">Images (JPEG, PNG, GIF, WebP) up to 10MB</p>
+                        </>
+                      )}
+                      <input 
+                        ref={fileInputRef}
+                        type="file" 
+                        className="hidden" 
+                        accept="image/*" 
+                        onChange={(e) => handleFileChange(e, false)}
+                        disabled={uploadingImage}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[#8B735B] font-bold">Published Date</Label>
@@ -694,7 +819,7 @@ export default function Publications() {
                   </SelectTrigger>
                   <SelectContent className="bg-white border-[#EAD8C0]">
                     {PUBLICATION_TYPES.map((type) => (
-                      <SelectItem key={type.value} value={type.value} className="focus:bg-[#EAD8C0]/20 text-[#8B735B]">
+                      <SelectItem key={type.value} value={type.value} className="focus:bg-[#8B735B] focus:text-white text-[#8B735B] cursor-pointer">
                         {type.label}
                       </SelectItem>
                     ))}
@@ -774,13 +899,71 @@ export default function Publications() {
               </div>
               <div className="space-y-2">
                 <Label className="text-[#8B735B] font-bold">Publisher</Label>
-                <Input
-                  placeholder="Publisher name"
-                  className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
-                  value={editFormData.publisher}
-                  onChange={(e) => setEditFormData({ ...editFormData, publisher: e.target.value })}
-                />
+                <Select value={editFormData.publisher} onValueChange={(value) => setEditFormData({ ...editFormData, publisher: value })}>
+                  <SelectTrigger className="rounded-xl border-[#EAD8C0]/40 bg-white focus:ring-[#EAD8C0]">
+                    <SelectValue placeholder="Select publisher" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-[#EAD8C0]">
+                    {PUBLISHERS.map((publisher) => (
+                      <SelectItem key={publisher} value={publisher} className="focus:bg-[#8B735B] focus:text-white text-[#8B735B] cursor-pointer">
+                        {publisher}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              {editFormData.publisher === "Other" && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <Label className="text-[#8B735B] font-bold">Publisher Photo</Label>
+                  <div 
+                    onClick={() => editFileInputRef.current?.click()}
+                    className={cn(
+                      "border-2 border-dashed border-[#EAD8C0] rounded-2xl p-8 flex flex-col items-center justify-center bg-white/50 hover:bg-white hover:border-teal-600/50 transition-all cursor-pointer group relative overflow-hidden min-h-[200px]",
+                      uploadingImage && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {uploadingImage ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="w-8 h-8 animate-spin text-[#8B735B]" />
+                        <p className="text-xs font-medium text-[#8B735B]">Uploading image...</p>
+                      </div>
+                    ) : editFormData.publisher_photo ? (
+                      <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border border-[#EAD8C0]/30">
+                        <img src={editFormData.publisher_photo} alt="Publisher" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <p className="text-white text-xs font-bold">Change Image</p>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditFormData(prev => ({ ...prev, publisher_photo: "" }));
+                          }}
+                          className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-md z-10"
+                          title="Remove image"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-[#FAF7F2] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <Upload className="w-6 h-6 text-[#8B735B]" />
+                        </div>
+                        <p className="text-sm font-bold text-[#8B735B]">Click to upload or drag and drop</p>
+                        <p className="text-[11px] text-[#8B735B]/60 mt-1">Images (JPEG, PNG, GIF, WebP) up to 10MB</p>
+                      </>
+                    )}
+                    <input 
+                      ref={editFileInputRef}
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={(e) => handleFileChange(e, true)}
+                      disabled={uploadingImage}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-[#8B735B] font-bold">Published Date</Label>
