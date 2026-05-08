@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Loader2, Download } from "lucide-react";
-import { Navigate } from "react-router-dom";
-import { hasWriteAccess } from "@/lib/auth";
+import { Loader2, Download, Filter, Calendar, Mail, Phone, ExternalLink, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { adminAPI } from "@/lib/adminApi";
-// Excel and PDF export
+import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 
 interface JoinUsRow {
   id: string;
@@ -25,7 +30,6 @@ interface JoinUsRow {
   department?: string | null;
   after_ug?: string | null;
   cpi?: string | null;
-  ieee_member_2026?: string | null;
   ieee_membership?: string | null;
   resume_link?: string | null;
   research_expertise?: string[];
@@ -35,12 +39,16 @@ interface JoinUsRow {
   created_at: string;
 }
 
+const ITEMS_PER_PAGE = 8;
+const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
+
 export default function JoinRequests() {
   const [rows, setRows] = useState<JoinUsRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [yearFilter, setYearFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
-  const canAccess = hasWriteAccess();
 
   useEffect(() => {
     fetchRows();
@@ -56,7 +64,8 @@ export default function JoinRequests() {
           response.data.map((row: any) => ({
             ...row,
             id: String(row.id),
-            status: row.status || "pending",
+            status: String(row.status || "pending").trim().toLowerCase(),
+            batch: "2026", // Overriding as requested
             research_expertise: Array.isArray(row.research_expertise) ? row.research_expertise : [],
           }))
         );
@@ -74,8 +83,16 @@ export default function JoinRequests() {
     setLoading(false);
   };
 
+  const filteredRows = useMemo(() => {
+    if (yearFilter === "all") return rows;
+    return rows.filter(r => r.batch === yearFilter);
+  }, [rows, yearFilter]);
+
+  const totalPages = Math.ceil(filteredRows.length / ITEMS_PER_PAGE);
+  const pagedRows = filteredRows.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
   const exportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(filteredRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "JoinRequests");
     XLSX.writeFile(wb, "join_requests.xlsx");
@@ -86,11 +103,11 @@ export default function JoinRequests() {
     autoTable(doc, {
       head: [
         [
-          "Name", "Enrollment", "Semester", "Division", "Branch", "College", "Contact", "Email", "Batch", "Source", "Created At"
+          "Name", "Enrollment", "Semester", "Division", "Branch", "College", "Contact", "Email", "Batch", "Created At"
         ]
       ],
-      body: rows.map(r => [
-        r.name, r.enrollment, r.semester, r.division, r.branch, r.college, r.contact, r.email, r.batch, r.source, r.created_at
+      body: filteredRows.map(r => [
+        r.name, r.enrollment, r.semester, r.division, r.branch, r.college, r.contact, r.email, r.batch, r.created_at
       ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [22, 178, 157] },
@@ -99,150 +116,292 @@ export default function JoinRequests() {
     doc.save("join_requests.pdf");
   };
 
-  // Accept handler
-  const handleAccept = async (id: number) => {
-    const requestId = String(id);
-    setUpdatingId(requestId);
+  const handleAccept = async (id: string) => {
+    setUpdatingId(id);
     try {
-      const response = await adminAPI.updateJoinRequest(requestId, "approved");
-
+      const response = await adminAPI.updateJoinRequest(id, "approved");
       if (response.success) {
-        // Optimistically update UI since backend currently does not persist status
-        setRows((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: "approved" } : r)));
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
         toast({ title: "Request accepted" });
       }
     } catch (error: any) {
-      toast({ 
-        variant: "destructive", 
-        title: "Error accepting request", 
-        description: error.message 
-      });
+      toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // Reject handler
-  const handleReject = async (id: number) => {
-    const requestId = String(id);
-    setUpdatingId(requestId);
+  const handleReject = async (id: string) => {
+    setUpdatingId(id);
     try {
-      const response = await adminAPI.updateJoinRequest(requestId, "rejected");
-
+      const response = await adminAPI.updateJoinRequest(id, "rejected");
       if (response.success) {
-        // Optimistically update UI since backend currently does not persist status
-        setRows((prev) => prev.map((r) => (r.id === requestId ? { ...r, status: "rejected" } : r)));
+        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
         toast({ title: "Request rejected" });
       }
     } catch (error: any) {
-      toast({ 
-        variant: "destructive", 
-        title: "Error rejecting request", 
-        description: error.message 
-      });
+      toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
       setUpdatingId(null);
     }
   };
 
   const formatValue = (value: unknown) => {
-    if (Array.isArray(value)) {
-      return value.length > 0 ? value.join(", ") : "-";
-    }
-
+    if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "-";
     const text = String(value || "").trim();
     return text.length > 0 ? text : "-";
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-        <h2 className="text-xl font-bold">Join Us Requests</h2>
-        <div className="flex gap-2">
-          <Button onClick={exportExcel} variant="outline" className="gap-1 rounded-xl"><Download className="w-4 h-4" />Excel</Button>
-          <Button onClick={exportPDF} variant="outline" className="gap-1 rounded-xl"><Download className="w-4 h-4" />PDF</Button>
+    <div className="max-w-[1400px] mx-auto space-y-6 px-4 pb-12" style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl shadow-sm border border-[#EAD8C0]/50">
+        <div>
+          <h2 className="text-2xl font-bold text-[#4a453c] flex items-center gap-2">
+            <Filter className="w-6 h-6 text-teal-700" />
+            Join Requests
+          </h2>
+          <p className="text-sm text-[#8a7e72] mt-1 font-medium">Manage and review student applications for SRL membership.</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 bg-[#FAF7F2] p-1.5 rounded-xl border border-[#EAD8C0]/60">
+            <Calendar className="w-4 h-4 text-[#8a7e72] ml-2" />
+            <Select value={yearFilter} onValueChange={(v) => { setYearFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger className="w-[130px] border-none bg-transparent h-9 text-sm font-semibold text-[#5a5248] focus:ring-0">
+                <SelectValue placeholder="Year Filter" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#FAF7F2] border-[#EAD8C0]">
+                <SelectItem value="all">All Batches</SelectItem>
+                <SelectItem value="2025">Batch 2025</SelectItem>
+                <SelectItem value="2026">Batch 2026</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="h-10 w-[1px] bg-[#EAD8C0]/50 hidden md:block" />
+
+          <div className="flex gap-2">
+            <Button onClick={exportExcel} variant="outline" className="gap-2 rounded-xl border-[#EAD8C0] text-[#5a5248] hover:bg-[#FAF7F2] font-semibold">
+              <Download className="w-4 h-4" /> Excel
+            </Button>
+            <Button onClick={exportPDF} variant="outline" className="gap-2 rounded-xl border-[#EAD8C0] text-[#5a5248] hover:bg-[#FAF7F2] font-semibold">
+              <Download className="w-4 h-4" /> PDF
+            </Button>
+          </div>
         </div>
       </div>
+
       {loading ? (
-        <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
-      ) : rows.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">No join requests found.</div>
+        <div className="flex flex-col items-center justify-center h-80 gap-4">
+          <Loader2 className="w-10 h-10 animate-spin text-teal-700" />
+          <p className="text-[#8a7e72] font-medium animate-pulse">Fetching request data...</p>
+        </div>
+      ) : filteredRows.length === 0 ? (
+        <div className="text-center py-24 bg-white rounded-2xl border border-dashed border-[#EAD8C0] shadow-sm">
+          <div className="text-5xl mb-4">📂</div>
+          <h3 className="text-lg font-bold text-[#4a453c]">No join requests found</h3>
+          <p className="text-[#8a7e72] mt-1">There are no applications matching the current filter.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-white/60">
-          <table className="min-w-full text-xs sm:text-sm">
-            <thead className="bg-primary/10">
-              <tr>
-                <th className="px-2 py-2">Name</th>
-                <th className="px-2 py-2">Enrollment</th>
-                <th className="px-2 py-2">Semester</th>
-                <th className="px-2 py-2">Division</th>
-                <th className="px-2 py-2">Branch</th>
-                <th className="px-2 py-2">College</th>
-                <th className="px-2 py-2">Contact</th>
-                <th className="px-2 py-2">Email</th>
-                <th className="px-2 py-2">Batch</th>
-                <th className="px-2 py-2">Source</th>
-                <th className="px-2 py-2">Details</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Created At</th>
-                <th className="px-2 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b last:border-0 hover:bg-primary/5">
-                  <td className="px-2 py-1 whitespace-nowrap">{r.name}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.enrollment}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.semester}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.division}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.branch}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.college}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.contact}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.email}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.batch}</td>
-                  <td className="px-2 py-1 whitespace-nowrap">{r.source}</td>
-                  <td className="px-2 py-1 min-w-96 text-xs leading-5 text-muted-foreground">
-                    <div className="space-y-0.5">
-                      <p><span className="font-medium text-foreground">Department:</span> {formatValue(r.department)}</p>
-                      <p><span className="font-medium text-foreground">After UG:</span> {formatValue(r.after_ug)}</p>
-                      <p><span className="font-medium text-foreground">CPI:</span> {formatValue(r.cpi)}</p>
-                      <p><span className="font-medium text-foreground">IEEE Member 2026:</span> {formatValue(r.ieee_member_2026)}</p>
-                      <p><span className="font-medium text-foreground">IEEE Membership:</span> {formatValue(r.ieee_membership)}</p>
-                      <p><span className="font-medium text-foreground">Research Expertise:</span> {formatValue(r.research_expertise)}</p>
-                      <p><span className="font-medium text-foreground">Research Paper:</span> {formatValue(r.research_publication)}</p>
-                      <p><span className="font-medium text-foreground">Ongoing Research:</span> {formatValue(r.research_ongoing)}</p>
-                      <p>
-                        <span className="font-medium text-foreground">Resume:</span>{" "}
-                        {r.resume_link ? (
-                          <a href={r.resume_link} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
-                            Open link
-                          </a>
-                        ) : (
-                          "-"
-                        )}
-                      </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4">
+            <AnimatePresence mode="popLayout">
+              {pagedRows.map((r, idx) => (
+                <motion.div
+                  key={r.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="bg-white rounded-2xl border border-[#EAD8C0]/60 shadow-sm hover:shadow-md transition-all overflow-hidden group mb-4"
+                >
+                  <div className="flex flex-col xl:flex-row items-stretch min-h-[180px]">
+                    {/* Section 1: Profile Info */}
+                    <div className="p-5 xl:w-[22%] bg-[#FAF7F2]/30 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center text-teal-800 font-bold text-lg border-2 border-teal-200 shadow-sm">
+                            {r.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-[#1a1810] text-lg leading-tight">{r.name}</h3>
+                            <span className="text-[11px] font-bold text-teal-700 uppercase tracking-wider">{r.batch} Batch</span>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-2 text-sm text-[#5a5248]">
+                            <Mail className="w-4 h-4 text-[#8a7e72]" />
+                            <span className="truncate" title={r.email}>{r.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-[#5a5248]">
+                            <Phone className="w-4 h-4 text-[#8a7e72]" />
+                            <span>{r.contact}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-4">
+                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          r.status === 'approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                          r.status === 'rejected' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                          'bg-amber-100 text-amber-800 border border-amber-200'
+                        }`}>
+                          {r.status === 'approved' ? 'Accepted' : r.status === 'rejected' ? 'Rejected' : 'Pending'}
+                        </span>
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-2 py-1 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      r.status === 'approved' ? 'bg-green-100 text-green-800' :
-                      r.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {r.status ? r.status.charAt(0).toUpperCase() + r.status.slice(1) : 'Pending'}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
-                  <td className="px-2 py-1 whitespace-nowrap space-x-1">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed" disabled={updatingId === r.id || r.status !== 'pending'} onClick={() => handleAccept(Number(r.id))}>Accept</Button>
-                    <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed" disabled={updatingId === r.id || r.status !== 'pending'} onClick={() => handleReject(Number(r.id))}>Reject</Button>
-                  </td>
-                </tr>
+
+                    <div className="hidden xl:block w-[1px] bg-[#EAD8C0]" />
+
+                    {/* Section 2: Academic Details */}
+                    <div className="p-5 xl:w-[22%] grid grid-cols-2 gap-4 h-full items-start">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Enrollment</p>
+                        <code className="text-xs font-bold text-[#4a453c] bg-[#FAF7F2] px-2 py-1 rounded border border-[#EAD8C0]/40">{r.enrollment}</code>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Semester</p>
+                        <p className="text-sm font-semibold text-[#5a5248]">{r.semester} (Div {r.division})</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Branch</p>
+                        <p className="text-sm font-semibold text-[#5a5248]">{r.branch}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">College</p>
+                        <p className="text-xs font-semibold text-[#5a5248] leading-tight">{r.college}</p>
+                      </div>
+                    </div>
+
+                    <div className="hidden xl:block w-[1px] bg-[#EAD8C0]" />
+
+                    {/* Section 3: Research & Expertise */}
+                    <div className="p-5 xl:w-[25%] space-y-4">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Research Expertise</p>
+                        <div className="flex flex-wrap gap-1">
+                          {r.research_expertise && r.research_expertise.length > 0 ? (
+                            r.research_expertise.map((exp, i) => (
+                              <span key={i} className="text-[10px] bg-stone-100 text-[#5a5248] px-2 py-0.5 rounded-md border border-stone-200 font-medium">{exp}</span>
+                            ))
+                          ) : <span className="text-xs text-[#8a7e72] italic">No expertise listed</span>}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">CPI / GPA</p>
+                        <p className="text-sm font-bold text-teal-800">{formatValue(r.cpi)}</p>
+                      </div>
+                      {r.resume_link && (
+                        <a href={r.resume_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800 hover:underline transition-colors mt-2">
+                          <ExternalLink className="w-3.5 h-3.5" /> View Resume
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="hidden xl:block w-[1px] bg-[#EAD8C0]" />
+
+                    {/* Section 4: Other Details & Actions */}
+                    <div className="p-5 xl:flex-1 flex flex-col justify-between">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Other Details</p>
+                        <p className="text-xs text-[#5a5248] leading-relaxed line-clamp-3">
+                          <span className="font-bold">After UG:</span> {formatValue(r.after_ug)}<br/>
+                          <span className="font-bold">IEEE:</span> {formatValue(r.ieee_membership)}<br/>
+                          <span className="font-bold">Pubs:</span> {formatValue(r.research_publication)}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-end items-center gap-3 pt-6 relative z-30">
+                        {r.status === 'pending' || !r.status ? (
+                          <>
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleAccept(r.id)}
+                              disabled={updatingId === r.id}
+                              className="bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-full h-10 px-6 font-bold transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer gap-2 border-b-2 border-teal-800/30"
+                            >
+                              {updatingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                                <>
+                                  <CheckCircle className="w-4 h-4" />
+                                  Accept
+                                </>
+                              )}
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleReject(r.id)}
+                              disabled={updatingId === r.id}
+                              className="bg-gradient-to-br from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white rounded-full h-10 px-6 font-bold transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer gap-2 border-b-2 border-red-800/30"
+                            >
+                              <XCircle className="w-4 h-4" />
+                              Reject
+                            </Button>
+                          </>
+                        ) : (
+                          <div className={`text-xs font-bold italic px-5 py-2.5 rounded-xl border flex items-center gap-2 ${
+                            r.status === 'approved' 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm' 
+                              : 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm'
+                          }`}>
+                            {r.status === 'approved' ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            This request has been {r.status === 'approved' ? 'accepted' : 'rejected'}.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Footer Bar */}
+                  <div className="px-5 py-2 bg-stone-50/50 border-t border-[#EAD8C0]/30 flex justify-between items-center">
+                    <span className="text-[10px] text-[#b0a898] font-medium italic">Applied via {r.source || 'Direct'}</span>
+                    <span className="text-[10px] text-[#b0a898] font-medium">{new Date(r.created_at).toLocaleString()}</span>
+                  </div>
+                </motion.div>
               ))}
-            </tbody>
-          </table>
+            </AnimatePresence>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 bg-white rounded-2xl border border-[#EAD8C0]/50 shadow-sm mt-6">
+              <span className="text-xs font-bold text-[#8a7e72]">
+                Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredRows.length)}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredRows.length)} of {filteredRows.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="w-9 h-9 rounded-full border border-[#EAD8C0] flex items-center justify-center text-[#5a5248] disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#FAF7F2] transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+                  <button 
+                    key={n}
+                    onClick={() => setCurrentPage(n)}
+                    className={`w-9 h-9 rounded-full text-sm font-bold transition-all ${
+                      currentPage === n 
+                        ? 'bg-teal-700 text-white shadow-lg shadow-teal-700/20' 
+                        : 'text-[#5a5248] hover:bg-[#FAF7F2]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="w-9 h-9 rounded-full border border-[#EAD8C0] flex items-center justify-center text-[#5a5248] disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#FAF7F2] transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
-}
+}
