@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -80,14 +80,9 @@ export default function Timeline() {
       setLoading(true);
       const response = await adminAPI.getTimeline();
 
-      if (response.success && Array.isArray(response.data)) {
-        const sorted = response.data.sort((a: any, b: any) =>
-          (a.serial_no || 0) - (b.serial_no || 0)
-        );
-        setEntries(sorted as TimelineEntry[]);
-      } else {
-        setEntries([]);
-      }
+      const list = parseList(response);
+      const sorted = list.sort((a: any, b: any) => (a.serial_no || 0) - (b.serial_no || 0));
+      setEntries(sorted as TimelineEntry[]);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -132,7 +127,7 @@ export default function Timeline() {
         image_url: formData.image_url.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({
           title: "Timeline entry added",
         });
@@ -172,14 +167,11 @@ export default function Timeline() {
     }
 
     try {
-      const response = await adminAPI.deleteTimelineEntry(String(id));
-
-      if (response.success) {
-        toast({
-          title: "Timeline entry deleted",
-        });
-        fetchTimelineEntries();
-      }
+      await adminAPI.deleteTimelineEntry(String(id));
+      toast({
+        title: "Timeline entry deleted",
+      });
+      fetchTimelineEntries();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -259,7 +251,7 @@ export default function Timeline() {
         image_url: editFormData.image_url.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({
           title: "Timeline entry updated",
         });

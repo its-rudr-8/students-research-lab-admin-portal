@@ -73,7 +73,7 @@ function Dashboard() {
           adminAPI.getActivities().catch(() => ({ success: false, data: [] })),
           adminAPI.getLeaderboard().catch(() => ({ leaderboard: [] })),
           adminAPI.getMonthlyLeaderboard(apiMonth, selectedYear).catch(() => ({ leaderboard: [] })),
-          adminAPI.getResearch().catch(() => ({ success: false, data: [] })),
+          Promise.resolve({ success: false, data: [] }), // Research projects module was removed
           adminAPI.getAchievements().catch(() => ({ success: false, data: [] }))
         ]);
 

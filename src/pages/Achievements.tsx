@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
 import { cn } from "@/lib/utils";
 
@@ -60,14 +60,9 @@ export default function Achievements() {
       setLoading(true);
       const response = await adminAPI.getAchievements();
 
-      if (response.success && Array.isArray(response.data)) {
-        const sorted = response.data.sort((a: any, b: any) =>
-          (a.serial_no || 0) - (b.serial_no || 0)
-        );
-        setAchievements(sorted as Achievement[]);
-      } else {
-        setAchievements([]);
-      }
+      const list = parseList(response);
+      const sorted = list.sort((a: any, b: any) => (a.serial_no || 0) - (b.serial_no || 0));
+      setAchievements(sorted as Achievement[]);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -103,7 +98,7 @@ export default function Achievements() {
         image_url: formData.image_url.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({ title: "Achievement added" });
         setOpen(false);
         setFormData({
@@ -132,11 +127,9 @@ export default function Achievements() {
     if (!confirm("Are you sure you want to delete this achievement?")) return;
 
     try {
-      const response = await adminAPI.deleteAchievement(String(id));
-      if (response.success) {
-        toast({ title: "Achievement deleted" });
-        fetchAchievements();
-      }
+      await adminAPI.deleteAchievement(String(id));
+      toast({ title: "Achievement deleted" });
+      fetchAchievements();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -173,7 +166,7 @@ export default function Achievements() {
         image_url: editFormData.image_url.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({ title: "Achievement updated" });
         setEditOpen(false);
         fetchAchievements();

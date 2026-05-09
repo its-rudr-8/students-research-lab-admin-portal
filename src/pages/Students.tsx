@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 
 interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; photo_url?: string; }
 
@@ -49,7 +49,7 @@ export default function Students() {
   const canEdit = hasWriteAccess();
 
   useEffect(() => { load(); }, []);
-  const load = async () => { try { setLoading(true); const r = await adminAPI.getStudents(); setStudents(r.success && Array.isArray(r.data) ? r.data : []); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } finally { setLoading(false); } };
+  const load = async () => { try { setLoading(true); const r = await adminAPI.getStudents(); setStudents(parseList(r)); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } finally { setLoading(false); } };
 
   const sorted = useMemo(() => [...students].sort((a, b) => { const isMaster = (s: Student) => (s.batch?.toLowerCase().includes("master")) || (s.enrollment_no?.toUpperCase().includes("ME")) || (s.student_name?.toLowerCase().includes("ghetiya poojan")); const aM = isMaster(a) ? 1 : 0, bM = isMaster(b) ? 1 : 0; if (aM !== bM) return aM - bM; const x = (a.batch || "").toUpperCase(), y = (b.batch || "").toUpperCase(); return y < x ? -1 : y > x ? 1 : (a.student_name || "").localeCompare(b.student_name || ""); }), [students]);
   const filtered = useMemo(() => sorted.filter(s => { const q = search.toLowerCase(); return (!q || [s.student_name, s.enrollment_no, s.email, s.department, s.batch].some(v => v?.toLowerCase().includes(q))) && (!batchFilter || s.batch === batchFilter); }), [sorted, search, batchFilter]);
@@ -63,8 +63,8 @@ export default function Students() {
   const toggleAll = () => { if (allSel) { const s = new Set(sel); paged.forEach(st => s.delete(st.enrollment_no)); setSel(s); } else { const s = new Set(sel); paged.forEach(st => s.add(st.enrollment_no)); setSel(s); } };
   const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "General Members" }); };
 
-  const handleAdd = async () => { if (!canEdit || !form.student_name || !form.enrollment_no || !form.email) { toast({ variant: "destructive", title: "Fill required fields" }); return; } try { const r = await adminAPI.createStudent(form); if (r.success && r.data) { setStudents(p => [r.data, ...p]); setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
-  const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r.success && r.data) { setStudents(p => p.map(s => s.id === editSt.id ? r.data : s)); setEditSt(null); toast({ title: "Student updated" }); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
+  const handleAdd = async () => { if (!canEdit || !form.student_name || !form.enrollment_no || !form.email) { toast({ variant: "destructive", title: "Fill required fields" }); return; } try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
+  const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r) { setEditSt(null); toast({ title: "Student updated" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleDel = async (s: Student) => { if (!canEdit) return; try { await adminAPI.deleteStudent(s.enrollment_no); setStudents(p => p.filter(x => x.id !== s.id)); setSel(prev => { const n = new Set(prev); n.delete(s.enrollment_no); return n; }); toast({ title: "Student removed" }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleBulkDel = async () => { if (!canEdit) return; const rm = students.filter(s => sel.has(s.enrollment_no)); try { await Promise.all(rm.map(s => adminAPI.deleteStudent(s.enrollment_no))); setStudents(p => p.filter(s => !sel.has(s.enrollment_no))); setSel(new Set()); toast({ title: `${rm.length} students removed` }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
 
