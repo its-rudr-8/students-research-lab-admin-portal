@@ -256,39 +256,6 @@ export const adminAPI = {
     return apiCall(`/admin/timeline/${id}`, "DELETE");
   },
 
-  // Research APIs (research papers)
-  async getResearch() {
-    return apiCall("/admin/research");
-  },
-
-  async createResearch(data: any) {
-    return apiCall("/admin/research", "POST", data);
-  },
-
-  async updateResearch(id: string, data: any) {
-    return apiCall(`/admin/research/${id}`, "PUT", data);
-  },
-
-  async deleteResearch(id: string) {
-    return apiCall(`/admin/research/${id}`, "DELETE");
-  },
-
-  // Research Projects APIs
-  async getResearchProjects() {
-    return apiCall("/admin/research-projects");
-  },
-
-  async createResearchProject(data: any) {
-    return apiCall("/admin/research-projects", "POST", data);
-  },
-
-  async updateResearchProject(id: string, data: any) {
-    return apiCall(`/admin/research-projects/${id}`, "PUT", data);
-  },
-
-  async deleteResearchProject(id: string) {
-    return apiCall(`/admin/research-projects/${id}`, "DELETE");
-  },
 
   // Publication APIs
   // Publication APIs

@@ -60,6 +60,7 @@ interface Publication {
   status?: string;
   approved_by?: string;
   approved_at?: string;
+  source?: string;
 }
 
 export default function Publications() {
@@ -274,9 +275,17 @@ export default function Publications() {
       const response = await adminAPI.getPublications();
 
       if (response.success && Array.isArray(response.data)) {
-        const sorted = response.data.sort((a: any, b: any) =>
-          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-        );
+        const sorted = response.data.sort((a: any, b: any) => {
+          const dateA = new Date(a.published_date || a.date || 0).getTime();
+          const dateB = new Date(b.published_date || b.date || 0).getTime();
+          
+          if (dateB !== dateA) {
+            return dateB - dateA; // Latest publication date first
+          }
+          
+          // Fallback to most recently created if publication dates are equal
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        });
         setPublications(sorted as Publication[]);
       } else {
         setPublications([]);
@@ -352,7 +361,7 @@ export default function Publications() {
     const picked = new Date(formData.published_date);
     picked.setHours(0, 0, 0, 0);
     if (picked > today) {
-      toast({ variant: "destructive", title: "Invalid date", description: "Published Date cannot be a future date." });
+      toast({ variant: "destructive", title: "Invalid date", description: "Future publication dates are not allowed." });
       return;
     }
 
@@ -381,8 +390,10 @@ export default function Publications() {
         venue: formData.venue.trim() || null,
         description: formData.description.trim() || null,
         category: formData.category.trim() || null,
-        year: formData.year || new Date().getFullYear(),
+        year: formData.published_date ? new Date(formData.published_date).getFullYear() : new Date().getFullYear(),
         publisher_photo: formData.publisher_photo || null,
+        status: "APPROVED",
+        source: "admin manual creation",
       };
 
       if (publisherLogoId !== null) {
@@ -392,7 +403,7 @@ export default function Publications() {
       const response = await adminAPI.createPublication(payload);
 
       if (response.success || response.data) {
-        toast({ title: "Submitted", description: "Your publication has been submitted successfully and is pending admin approval. It will appear on the website once approved." });
+        toast({ title: "Success", description: "Publication added successfully and is now active." });
         setOpen(false);
         setFormData({
           title: "", authors: "", published_date: "", conference_date: "",
@@ -500,7 +511,7 @@ export default function Publications() {
       const picked = new Date(editFormData.published_date);
       picked.setHours(0, 0, 0, 0);
       if (picked > today) {
-        toast({ variant: "destructive", title: "Invalid date", description: "Published Date cannot be a future date." });
+        toast({ variant: "destructive", title: "Invalid date", description: "Future publication dates are not allowed." });
         return;
       }
     }
@@ -525,7 +536,7 @@ export default function Publications() {
         venue: editFormData.venue.trim() || null,
         description: editFormData.description.trim() || null,
         category: editFormData.category.trim() || null,
-        year: editFormData.year || new Date().getFullYear(),
+        year: editFormData.published_date ? new Date(editFormData.published_date).getFullYear() : new Date().getFullYear(),
         publisher_photo: editFormData.publisher_photo || null,
       };
 
@@ -822,57 +833,45 @@ export default function Publications() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[#8B735B] font-bold">
-                      Published Date <span className="text-red-500">*</span>
-                    </Label>
-                    <Popover open={addPublishedDateOpen} onOpenChange={setAddPublishedDateOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
-                            !formData.published_date && "text-muted-foreground"
-                          )}
-                        >
-                          {formData.published_date ? format(new Date(formData.published_date), "do MMMM yyyy") : <span>Pick a date</span>}
-                          <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
-                        <Calendar
-                          mode="single"
-                          selected={formData.published_date ? new Date(formData.published_date) : undefined}
-                          onSelect={(date) => {
-                            setFormData({ ...formData, published_date: date ? format(date, "yyyy-MM-dd") : "" });
-                            setAddPublishedDateOpen(false);
-                          }}
-                          disabled={disableFutureDates}
-                          initialFocus
-                          className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left shadow-xl"
-                          classNames={{
-                            day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
-                            day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
-                            day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
-                            day_disabled: "opacity-30 cursor-not-allowed hover:!bg-transparent",
-                            head_cell: "text-[#8B735B] font-bold w-7",
-                            cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[#8B735B] font-bold">Year</Label>
-                    <Input
-                      type="number"
-                      placeholder="Year"
-                      className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
-                      value={formData.year}
-                      onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) || new Date().getFullYear() })}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label className="text-[#8B735B] font-bold">
+                    Published Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Popover open={addPublishedDateOpen} onOpenChange={setAddPublishedDateOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
+                          !formData.published_date && "text-muted-foreground"
+                        )}
+                      >
+                        {formData.published_date ? format(new Date(formData.published_date), "do MMMM yyyy") : <span>Pick a date</span>}
+                        <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
+                      <Calendar
+                        mode="single"
+                        selected={formData.published_date ? new Date(formData.published_date) : undefined}
+                        onSelect={(date) => {
+                          setFormData({ ...formData, published_date: date ? format(date, "yyyy-MM-dd") : "" });
+                          setAddPublishedDateOpen(false);
+                        }}
+                        disabled={disableFutureDates}
+                        initialFocus
+                        className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left shadow-xl"
+                        classNames={{
+                          day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                          day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                          day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                          day_disabled: "opacity-30 cursor-not-allowed hover:!bg-transparent",
+                          head_cell: "text-[#8B735B] font-bold w-7",
+                          cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1003,7 +1002,7 @@ export default function Publications() {
                           {publication.status === "APPROVED" && (
                             <span 
                               className="px-3 py-1 bg-green-100 text-green-800 text-[10px] font-bold uppercase tracking-[0.1em] rounded-lg border border-green-200"
-                              title={publication.approved_by ? `Approved by ${publication.approved_by} on ${formatDate(publication.approved_at)}` : "Approved"}
+                              title={publication.source === "user request" && publication.approved_by ? `Approved by ${publication.approved_by} on ${formatDate(publication.approved_at)}` : "Approved"}
                             >
                               APPROVED
                             </span>
@@ -1431,55 +1430,43 @@ export default function Publications() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[#8B735B] font-bold">Published Date</Label>
-                  <Popover open={editPublishedDateOpen} onOpenChange={setEditPublishedDateOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
-                          !editFormData.published_date && "text-muted-foreground"
-                        )}
-                      >
-                        {editFormData.published_date ? format(new Date(editFormData.published_date), "do MMMM yyyy") : <span>Pick a date</span>}
-                        <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
-                      <Calendar
-                        mode="single"
-                        selected={editFormData.published_date ? new Date(editFormData.published_date) : undefined}
-                        onSelect={(date) => {
-                          setEditFormData({ ...editFormData, published_date: date ? format(date, "yyyy-MM-dd") : "" });
-                          setEditPublishedDateOpen(false);
-                        }}
-                        disabled={disableFutureDates}
-                        initialFocus
-                        className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left shadow-xl"
-                        classNames={{
-                          day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
-                          day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
-                          day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
-                          day_disabled: "opacity-30 cursor-not-allowed hover:!bg-transparent",
-                          head_cell: "text-[#8B735B] font-bold w-7",
-                          cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
-                        }}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[#8B735B] font-bold">Year</Label>
-                  <Input
-                    type="number"
-                    placeholder="Year"
-                    className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
-                    value={editFormData.year}
-                    onChange={(e) => setEditFormData({ ...editFormData, year: parseInt(e.target.value) || new Date().getFullYear() })}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label className="text-[#8B735B] font-bold">Published Date</Label>
+                <Popover open={editPublishedDateOpen} onOpenChange={setEditPublishedDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full rounded-xl border-[#EAD8C0]/40 bg-white px-3 py-2 text-sm font-normal justify-between text-left h-10",
+                        !editFormData.published_date && "text-muted-foreground"
+                      )}
+                    >
+                      {editFormData.published_date ? format(new Date(editFormData.published_date), "do MMMM yyyy") : <span>Pick a date</span>}
+                      <CalendarIcon className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent" align="start" side="bottom">
+                    <Calendar
+                      mode="single"
+                      selected={editFormData.published_date ? new Date(editFormData.published_date) : undefined}
+                      onSelect={(date) => {
+                        setEditFormData({ ...editFormData, published_date: date ? format(date, "yyyy-MM-dd") : "" });
+                        setEditPublishedDateOpen(false);
+                      }}
+                      disabled={disableFutureDates}
+                      initialFocus
+                      className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left shadow-xl"
+                      classNames={{
+                        day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                        day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                        day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                        day_disabled: "opacity-30 cursor-not-allowed hover:!bg-transparent",
+                        head_cell: "text-[#8B735B] font-bold w-7",
+                        cell: "h-7 w-7 text-center text-[11px] p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

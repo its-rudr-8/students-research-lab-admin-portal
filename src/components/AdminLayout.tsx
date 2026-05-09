@@ -33,7 +33,6 @@ import ScrollToTopButton from "@/components/ScrollToTopButton";
 const allNavItems = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard, requiresAdmin: false },
   { title: "Students", path: "/students", icon: Users, requiresAdmin: true },
-  { title: "Research", path: "/research", icon: BookOpen, requiresAdmin: true },
   { title: "Publications", path: "/publications", icon: BookOpen, requiresAdmin: true },
   { title: "Attendance", path: "/attendance", icon: CalendarCheck, requiresAdmin: false },
   { title: "Scores", path: "/scores", icon: Trophy, requiresAdmin: false },
@@ -47,7 +46,6 @@ const allNavItems = [
 const pageNames: Record<string, string> = {
   "/": "Dashboard",
   "/students": "Student Management",
-  "/research": "Research Work",
   "/publications": "Publications",
   "/attendance": "Attendance",
   "/scores": "Live Scores",

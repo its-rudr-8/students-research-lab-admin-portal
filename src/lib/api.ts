@@ -206,11 +206,6 @@ export async function deleteTimeline(id: number) {
   return res.data;
 }
 
-// ============ ADMIN RESEARCH ============
-export async function getResearch() {
-  const res = await apiCall<any>("/admin/research", "GET");
-  return res.data || [];
-}
 
 // ============ JOIN REQUESTS ============
 export async function getJoinRequests() {
