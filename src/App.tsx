@@ -7,7 +7,6 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminLayout from "@/components/AdminLayout";
 import Dashboard from "@/pages/Dashboard";
 import Students from "@/pages/Students";
-import Research from "@/pages/Research";
 import Publications from "@/pages/Publications";
 import Attendance from "@/pages/Attendance";
 import Scores from "@/pages/Scores";
@@ -119,14 +118,6 @@ const App = () => {
                   element={
                     <AdminOnlyRoute>
                       <Students />
-                    </AdminOnlyRoute>
-                  }
-                />
-                <Route
-                  path="/research"
-                  element={
-                    <AdminOnlyRoute>
-                      <Research />
                     </AdminOnlyRoute>
                   }
                 />

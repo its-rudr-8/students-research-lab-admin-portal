@@ -4,7 +4,6 @@ import { isAuthenticated, getStoredUser } from "@/lib/auth";
 // Pages that require admin access only
 const ADMIN_ONLY_PAGES = [
 	"/students",
-	"/research",
 	"/activities",
 	"/timeline",
 	"/achievements",

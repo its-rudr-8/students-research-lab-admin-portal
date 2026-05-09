@@ -8,7 +8,7 @@ const RAW_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://127.0.0.1:8000/api";
 
-const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "");
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 
 console.log("[API Client] Initialized with BASE_URL:", API_BASE_URL);
 
@@ -206,11 +206,6 @@ export async function deleteTimeline(id: number) {
   return res.data;
 }
 
-// ============ ADMIN RESEARCH ============
-export async function getResearch() {
-  const res = await apiCall<any>("/admin/research", "GET");
-  return res.data || [];
-}
 
 // ============ JOIN REQUESTS ============
 export async function getJoinRequests() {
