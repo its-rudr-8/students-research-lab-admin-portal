@@ -67,14 +67,32 @@ export default function Scores() {
     return (Number(match[2]) || 0) * 100 + (m[match[1].toLowerCase().substring(0, 3)] || 0);
   };
 
+  const normalizePeriod = (period: string) => {
+    const raw = normalizeText(period);
+    if (/^all\s*time$/i.test(raw)) return "All Time";
+    const match = raw.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!match) return raw;
+    const monthMap: Record<string, string> = {
+      january: "Jan", february: "Feb", march: "Mar", april: "Apr", may: "May", june: "Jun",
+      july: "Jul", august: "Aug", september: "Sep", october: "Oct", november: "Nov", december: "Dec",
+      jan: "Jan", feb: "Feb", mar: "Mar", apr: "Apr", jun: "Jun", jul: "Jul", aug: "Aug", sep: "Sep", oct: "Oct", nov: "Nov", dec: "Dec"
+    };
+    const monthName = monthMap[match[1].toLowerCase()] || match[1];
+    return `${monthName} ${match[2]}`;
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
       const [scoresRes, studentsRes] = await Promise.all([adminAPI.getScores(), adminAPI.getStudents()]);
       if (!scoresRes.success) { setLoading(false); return; }
-      const stats = Array.isArray(scoresRes.data.leaderboardStats) ? scoresRes.data.leaderboardStats : [];
+      
+      const rawStats = Array.isArray(scoresRes.data.leaderboardStats) ? scoresRes.data.leaderboardStats : [];
+      const stats = rawStats.map((s: any) => ({ ...s, period: normalizePeriod(s.period) }));
+      
       setCachedStudentsData(studentsRes.data || []);
-      const months = Array.from(new Set<string>(stats.map((r: any) => normalizeText(r.period)).filter((p: string) => p && !/^all\s*time$/i.test(p)))).sort((a, b) => monthRank(b) - monthRank(a));
+      const months = Array.from(new Set<string>(stats.map((r: any) => r.period).filter((p: string) => p && p !== "All Time"))).sort((a, b) => monthRank(b) - monthRank(a));
+      
       setMonthOptions(months);
       setCachedLeaderboardStats(stats);
       if (months.length > 0 && !selectedMonth) setSelectedMonth(months[0]);
@@ -102,18 +120,18 @@ export default function Scores() {
           agg.set(enr, { 
             id: normalizeText(score.id), 
             enrollment_no: enr, 
-            points: Number(score.debate_score || score.points || score.total_score) || 0, 
+            points: Number(score.debate_score || score.points || score.total_score || score.monthly_score || 0), 
             name, 
             initials: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2), 
             photo_url: stu.photo_url || score.image || score.photo, 
-            hours: Number(score.hours || score.total_hours || 0),
+            hours: Number(score.hours || score.total_hours || score.monthly_hours || 0),
             batch: stu.batch,
             department: stu.department
           });
         } else {
           const ex = agg.get(enr)!;
-          ex.points += Number(score.debate_score || score.points || 0);
-          if (viewMode === "cumulative") ex.hours = Number(((ex.hours || 0) + Number(score.hours || 0)).toFixed(1));
+          ex.points += Number(score.debate_score || score.points || score.total_score || score.monthly_score || 0);
+          ex.hours = Number(((ex.hours || 0) + Number(score.hours || score.total_hours || score.monthly_hours || 0)).toFixed(1));
         }
       });
       let rows = Array.from(agg.values());
@@ -236,7 +254,7 @@ export default function Scores() {
                   <tr style={{ background: "linear-gradient(90deg,#f8f6f1,#fbfaf7)" }}>
                     <th style={{ padding: "13px 24px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 80 }}>Rank</th>
                     <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0" }}>Student</th>
-                    <th className="hidden md:table-cell" style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
+                    <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
                     {viewMode === "cumulative" ? (
                       <>
                         <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Total Hours</th>
@@ -282,7 +300,7 @@ export default function Scores() {
                             </div>
                           </td>
 
-                          <td className="hidden md:table-cell" style={{ padding: "12px 16px" }}>
+                          <td style={{ padding: "12px 16px" }}>
                             <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{s.batch || "N/A"}</span>
                           </td>
 
@@ -297,7 +315,9 @@ export default function Scores() {
                             </>
                           ) : (
                             <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                              <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{metric}</span>
+                              <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>
+                                {metric}{viewMode === 'contributors' ? 'h' : ''}
+                              </span>
                             </td>
                           )}
 

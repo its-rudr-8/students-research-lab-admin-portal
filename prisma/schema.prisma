@@ -1,21 +1,15 @@
-<<<<<<< HEAD
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
-=======
->>>>>>> e0b918ac635d41cfb8cbd84349eeac337eafd0d9
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
 }
-<<<<<<< HEAD
-=======
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model achievement_content {
@@ -247,4 +241,4 @@ model timeline_entries {
 
   @@unique([step, title], map: "timeline_entries_step_title_unique")
 }
->>>>>>> e0b918ac635d41cfb8cbd84349eeac337eafd0d9
+
