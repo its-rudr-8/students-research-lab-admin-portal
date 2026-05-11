@@ -23,6 +23,13 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area, Cell, LabelList, LineChart, Line
 } from "recharts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Particles from "@/components/ui/Particles";
 import { getStoredUser } from "@/lib/auth";
 import { adminAPI } from "@/lib/adminApi";
@@ -224,7 +231,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="flex flex-col gap-3 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-2 px-4 h-[calc(100vh-100px)] overflow-hidden font-sans">
+    <div className="flex flex-col gap-3 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-2 px-2 md:px-4 md:h-[calc(100vh-100px)] md:overflow-hidden overflow-y-auto font-sans">
       <motion.div 
         animate={{ opacity: isAnimating ? 0.4 : 1, filter: isAnimating ? "blur(4px)" : "blur(0px)" }}
         initial={{ opacity: 0, y: 10 }} 
@@ -233,14 +240,29 @@ function Dashboard() {
         style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif" }}
       >
         {/* Month Navigator: Students Section Tab Theme */}
-        <div className="flex items-center justify-between bg-[#f8f6f1] border border-[#e0dbd2] rounded-full p-1.5 px-4 shadow-sm">
-          <div className="flex items-center gap-1">
-            <button onClick={() => setSelectedYear(y => y - 1)} className="p-1.5 hover:bg-[#1a3a2a]/10 rounded-full transition-colors"><ChevronLeft className="w-3.5 h-3.5 text-[#6a6050]" /></button>
-            <span className="text-xs font-black text-[#1a3a2a] tracking-tight w-10 text-center">{selectedYear}</span>
-            <button onClick={() => setSelectedYear(y => y + 1)} className="p-1.5 hover:bg-[#1a3a2a]/10 rounded-full transition-colors"><ChevronRight className="w-3.5 h-3.5 text-[#6a6050]" /></button>
+        <div className="flex items-center justify-between bg-[#f8f6f1] border border-[#e0dbd2] rounded-full p-1 md:p-1.5 px-3 md:px-4 shadow-sm shrink-0">
+          <div className="flex items-center gap-0.5 md:gap-1">
+            <button onClick={() => setSelectedYear(y => y - 1)} className="p-1 md:p-1.5 hover:bg-[#1a3a2a]/10 rounded-full transition-colors"><ChevronLeft className="w-3 h-3 md:w-3.5 md:h-3.5 text-[#6a6050]" /></button>
+            <span className="text-[10px] md:text-xs font-black text-[#1a3a2a] tracking-tight w-8 md:w-10 text-center">{selectedYear}</span>
+            <button onClick={() => setSelectedYear(y => y + 1)} className="p-1 md:p-1.5 hover:bg-[#1a3a2a]/10 rounded-full transition-colors"><ChevronRight className="w-3 h-3 md:w-3.5 md:h-3.5 text-[#6a6050]" /></button>
           </div>
           
-          <div className="flex gap-1 flex-1 justify-center px-4">
+          <div className="md:hidden flex-1 px-2">
+            <Select value={selectedMonth} onValueChange={handleMonthChange}>
+              <SelectTrigger className="w-full bg-white/50 border-[#e0dbd2] rounded-full h-8 text-[10px] font-bold text-[#1a3a2a]">
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#f8f6f1] border-[#e0dbd2]">
+                {MONTHS.map((m) => (
+                  <SelectItem key={m} value={m} className="text-[10px] font-bold text-[#6a6050] focus:bg-[#1a3a2a] focus:text-white">
+                    {m.toUpperCase()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="hidden md:flex gap-1 flex-1 justify-center px-4">
             {MONTHS.map((m) => (
               <button 
                 key={m} 
@@ -264,9 +286,9 @@ function Dashboard() {
         </div>
 
         {/* Top Section: Refined Grid */}
-        <div className="grid grid-cols-12 gap-4 h-[154px]">
-          <div className="col-span-8 flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3 flex-1">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:h-[154px]">
+          <div className="col-span-1 md:col-span-8 flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
               {[
                 { label: "Students", val: totalStudents, icon: Users, color: "text-amber-500", bg: "bg-amber-50" },
                 { label: "Hours", val: hoursDedicated.toLocaleString(), icon: Clock, color: "text-emerald-500", bg: "bg-emerald-50" },
@@ -283,7 +305,7 @@ function Dashboard() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
               <div className="bg-white border border-slate-100 rounded-2xl p-3 px-4 shadow-[0_6px_32px_rgba(26,74,52,0.06)] flex items-center justify-between group hover:shadow-lg transition-shadow">
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -325,7 +347,7 @@ function Dashboard() {
           </div>
 
           {/* Right Block: Luxury Impact Suite - Pastel Theme with Particles */}
-          <div className="col-span-4 bg-[#f8f6f1] border border-[#e0dbd2] rounded-2xl p-5 shadow-[0_6px_24px_rgba(26,58,42,0.04)] relative overflow-hidden flex flex-col justify-between group">
+          <div className="col-span-1 md:col-span-4 bg-[#f8f6f1] border border-[#e0dbd2] rounded-2xl p-5 shadow-[0_6px_24px_rgba(26,58,42,0.04)] relative overflow-hidden flex flex-col justify-between group min-h-[154px]">
             <div className="absolute inset-0 z-0">
               <Particles
                 particleCount={150}
@@ -381,7 +403,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 flex-1 min-h-0 pb-1">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0 pb-1">
           {/* Graph 1: Researchers - Vibrant Ranking */}
           <div className="bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col overflow-hidden group h-full">
             <div className="p-4 pb-0 flex justify-between items-center">
@@ -390,7 +412,7 @@ function Dashboard() {
               </h3>
             </div>
             
-            <div className="flex-1 min-h-0 px-2 mt-2 relative">
+            <div className="h-[300px] md:flex-1 md:min-h-0 px-2 mt-2 relative">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={cumulativeData} margin={{ top: 35, bottom: 70, left: 0, right: 10 }}>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -452,7 +474,7 @@ function Dashboard() {
                 <TrendingUp className="w-3.5 h-3.5 text-teal-500" /> Monthly Trends
               </h3>
             </div>
-            <div className="flex-1 min-h-0 px-2 mt-4">
+            <div className="h-[300px] md:flex-1 md:min-h-0 px-2 mt-4">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={monthlyScores} margin={{ top: 25, bottom: 45, left: 0, right: 10 }}>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -512,7 +534,7 @@ function Dashboard() {
               </h3>
             </div>
             
-            <div className="flex-1 px-5 space-y-4 overflow-y-auto no-scrollbar">
+            <div className="h-[300px] md:flex-1 px-5 space-y-4 overflow-y-auto no-scrollbar py-2">
               {timeDedication.slice(0, 5).map((item, i) => {
                 const gradients = [
                   "linear-gradient(90deg, #6366f1, #a855f7)", // Indigo -> Purple
