@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
-import * as api from "@/lib/api";
+import { adminAPI } from "@/lib/adminApi";
 import { getStoredUser } from "@/lib/auth";
 
 type MemberRecord = {
@@ -158,16 +158,16 @@ export default function MemberCV() {
     const fetchMembers = async () => {
       try {
         setLoadingMembers(true);
-        const data = await api.getStudents();
+        const data = await adminAPI.getStudents();
         const fetchedMembers = (data || [])
           .filter((row: any) => row.enrollment_no && String(row.member_type || "member").toLowerCase() !== "admin")
           .map((row: any) => ({
              ...row,
-             cv_completion: Math.floor(Math.random() * 80) + 20,
-             hacks: row.execution_hacks !== undefined ? row.execution_hacks : Math.floor(Math.random() * 5),
-             papers: row.execution_papers !== undefined ? row.execution_papers : Math.floor(Math.random() * 3),
-             ongoing: row.execution_ongoing !== undefined ? row.execution_ongoing : Math.floor(Math.random() * 4),
-             verified: Math.random() > 0.4,
+             cv_completion: row.cv_completion || 0,
+             hacks: row.execution_hacks || 0,
+             papers: row.execution_papers || 0,
+             ongoing: row.execution_ongoing || 0,
+             verified: row.verified || false,
           }));
 
         if (!currentUser) {
@@ -211,7 +211,7 @@ export default function MemberCV() {
 
       try {
         setLoadingProfile(true);
-        const data = await api.getMemberCVByEnrollment(selectedEnrollment);
+        const data = await adminAPI.getMemberCVByEnrollment(selectedEnrollment);
         if (!data) {
           setFormData(emptyFormData());
           return;
@@ -281,7 +281,7 @@ export default function MemberCV() {
         execution_papers: formData.execution_papers,
         updated_by: currentUser?.email || null,
       };
-      await api.updateMemberCV(payload);
+      await adminAPI.updateMemberCV(payload);
       toast({ title: "Profile saved", description: `CV profile updated for ${selectedMember.student_name}.` });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save failed", description: error.message || "Could not save profile." });
@@ -424,7 +424,7 @@ export default function MemberCV() {
           )}
         </div>
         {isAdmin && (
-          <Button variant="ghost" className="rounded-xl hover:bg-black/5 shrink-0" onClick={() => { setSelectedEnrollment(null); setShowGrid(true); }}>
+          <Button variant="ghost" className="rounded-xl hover:bg-black/5 shrink-0" onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Grid
           </Button>
         )}
@@ -617,7 +617,7 @@ export default function MemberCV() {
               </Button>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Button variant="outline" className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-full px-8 py-6 font-semibold bg-white" onClick={() => { setSelectedEnrollment(null); setShowGrid(true); }}>
+              <Button variant="outline" className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-full px-8 py-6 font-semibold bg-white" onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}>
                 Back
               </Button>
               <Button className="flex-1 sm:flex-none bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-8 py-6 font-semibold shadow-md" onClick={handleSave} disabled={saving || !canEditSelected}>

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Filter, Calendar, Mail, Phone, ExternalLink, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -59,19 +59,15 @@ export default function JoinRequests() {
     try {
       const response = await adminAPI.getJoinRequests();
       
-      if (response.success && Array.isArray(response.data)) {
-        setRows(
-          response.data.map((row: any) => ({
-            ...row,
-            id: String(row.id),
-            status: String(row.status || "pending").trim().toLowerCase(),
-            batch: "2026", // Overriding as requested
-            research_expertise: Array.isArray(row.research_expertise) ? row.research_expertise : [],
-          }))
-        );
-      } else {
-        setRows([]);
-      }
+      setRows(
+        parseList(response).map((row: any) => ({
+          ...row,
+          id: String(row.id),
+          status: String(row.status || "pending").trim().toLowerCase(),
+          batch: "2026",
+          research_expertise: Array.isArray(row.research_expertise) ? row.research_expertise : [],
+        }))
+      );
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -119,11 +115,9 @@ export default function JoinRequests() {
   const handleAccept = async (id: string) => {
     setUpdatingId(id);
     try {
-      const response = await adminAPI.updateJoinRequest(id, "approved");
-      if (response.success) {
-        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
-        toast({ title: "Request accepted" });
-      }
+      await adminAPI.updateJoinRequest(id, "approved");
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
+      toast({ title: "Request accepted" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
@@ -134,11 +128,9 @@ export default function JoinRequests() {
   const handleReject = async (id: string) => {
     setUpdatingId(id);
     try {
-      const response = await adminAPI.updateJoinRequest(id, "rejected");
-      if (response.success) {
-        setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
-        toast({ title: "Request rejected" });
-      }
+      await adminAPI.updateJoinRequest(id, "rejected");
+      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
+      toast({ title: "Request rejected" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -163,9 +163,7 @@ export default function Publications() {
   const fetchPublishers = async () => {
     try {
       const res = await adminAPI.getPublishers();
-      if (res.success && Array.isArray(res.data)) {
-        setPublishers(res.data);
-      }
+      setPublishers(parseList(res));
     } catch {
       // Publishers load silently; fallback to empty list
     }
@@ -185,7 +183,7 @@ export default function Publications() {
     try {
       setIsLogoLoading(true);
       const res = await adminAPI.getPublisherLogo(publisherId);
-      if (res.success) {
+      if (res) {
         setPublisherLogoId(publisherId);
         setLogoPreviewUrl(res.logo_url || null);
       }
@@ -202,8 +200,8 @@ export default function Publications() {
       setIsLogoLoading(true);
       setLogoError(null);
       const res = await adminAPI.uploadPublisherLogo(customPublisher.trim(), file);
-      if (res.success) {
-        setPublisherLogoId(res.symbol_id);
+      if (res) {
+        setPublisherLogoId(res.symbol_id ?? res.id ?? null);
         setLogoPreviewUrl(res.logo_url || null);
       }
     } catch (err: any) {
@@ -274,22 +272,14 @@ export default function Publications() {
       setLoading(true);
       const response = await adminAPI.getPublications();
 
-      if (response.success && Array.isArray(response.data)) {
-        const sorted = response.data.sort((a: any, b: any) => {
-          const dateA = new Date(a.published_date || a.date || 0).getTime();
-          const dateB = new Date(b.published_date || b.date || 0).getTime();
-          
-          if (dateB !== dateA) {
-            return dateB - dateA; // Latest publication date first
-          }
-          
-          // Fallback to most recently created if publication dates are equal
-          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-        });
-        setPublications(sorted as Publication[]);
-      } else {
-        setPublications([]);
-      }
+      const list = parseList(response);
+      const sorted = list.sort((a: any, b: any) => {
+        const dateA = new Date(a.published_date || a.date || 0).getTime();
+        const dateB = new Date(b.published_date || b.date || 0).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      });
+      setPublications(sorted as Publication[]);
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -334,7 +324,7 @@ export default function Publications() {
       return;
     }
 
-    if (!formData.published_date) {
+    if (formData.type_of_publication !== "poster" && !formData.published_date) {
       toast({ variant: "destructive", title: "Missing required fields", description: "Published Date is required." });
       return;
     }
@@ -357,12 +347,14 @@ export default function Publications() {
       return;
     }
 
-    // --- Date range validation (published_date is guaranteed non-empty here) ---
-    const picked = new Date(formData.published_date);
-    picked.setHours(0, 0, 0, 0);
-    if (picked > today) {
-      toast({ variant: "destructive", title: "Invalid date", description: "Future publication dates are not allowed." });
-      return;
+    // --- Date range validation ---
+    if (formData.published_date) {
+      const picked = new Date(formData.published_date);
+      picked.setHours(0, 0, 0, 0);
+      if (picked > today) {
+        toast({ variant: "destructive", title: "Invalid date", description: "Future publication dates are not allowed." });
+        return;
+      }
     }
 
     if (isPublisherRequired && !formData.publisher.trim()) {
@@ -370,39 +362,63 @@ export default function Publications() {
       return;
     }
 
-    if (formData.publisher && publisherLogoId === null) {
-      toast({ variant: "destructive", title: "Missing publisher logo", description: "Please wait for the publisher logo to load, or upload one for a custom publisher." });
+    if (formData.publisher && isLogoLoading) {
+      toast({ variant: "destructive", title: "Please wait", description: "Publisher logo is still loading. Try again in a moment." });
+      return;
+    }
+
+    if (showOtherFields && customPublisher.trim() && publisherLogoId === null) {
+      toast({ variant: "destructive", title: "Missing publisher logo", description: "Please upload a logo for your custom publisher." });
       return;
     }
 
     try {
       setSubmitting(true);
+
+      // Normalize URL — prepend https:// if no protocol provided
+      const rawLink = formData.link_to_paper.trim();
+      const normalizedLink = rawLink && !/^https?:\/\//i.test(rawLink) ? `https://${rawLink}` : rawLink;
+
+      // Always send published_date; default to today for poster type when not picked
+      const publishedDate = formData.published_date || new Date().toISOString().split("T")[0];
+
+      // Build payload — send only fields the backend's create schema expects.
+      // Do NOT send `year` (backend derives it from published_date server-side).
+      // Do NOT send `student_authors` (admin endpoint maps only `authors`).
       const payload: any = {
         title: formData.title.trim(),
-        student_authors: formData.authors.trim() || null,
-        published_date: formData.published_date || null,
-        conference_date: formData.conference_date || null,
-        type_of_publication: formData.type_of_publication.trim() || null,
-        publisher: formData.publisher.trim() || null,
-        department: formData.department.trim() || null,
-        institute: formData.institute.trim() || null,
-        link_to_paper: formData.link_to_paper.trim() || null,
-        venue: formData.venue.trim() || null,
-        description: formData.description.trim() || null,
-        category: formData.category.trim() || null,
-        year: formData.published_date ? new Date(formData.published_date).getFullYear() : new Date().getFullYear(),
-        publisher_photo: formData.publisher_photo || null,
-        status: "APPROVED",
-        source: "admin manual creation",
+        authors: formData.authors.trim() || undefined,
+        published_date: publishedDate,
+        type_of_publication: formData.type_of_publication.trim(),
+        link_to_paper: normalizedLink || undefined,
       };
 
-      if (publisherLogoId !== null) {
-        payload.publisher_logo_id = publisherLogoId;
+      if (formData.conference_date) payload.conference_date = formData.conference_date;
+      if (formData.publisher.trim()) payload.publisher = formData.publisher.trim();
+      if (formData.department.trim()) payload.department = formData.department.trim();
+      if (formData.institute.trim()) payload.institute = formData.institute.trim();
+      if (formData.venue.trim()) payload.venue = formData.venue.trim();
+      if (formData.description.trim()) payload.description = formData.description.trim();
+      if (formData.category.trim()) payload.category = formData.category.trim();
+      // Only attach publisher_logo_id when publisher is also being sent
+      if (publisherLogoId !== null && formData.publisher.trim()) payload.publisher_logo_id = publisherLogoId;
+
+      // Create as PENDING first — the backend approve endpoint handles setting APPROVED status
+      const createResponse = await adminAPI.createPublication(payload);
+
+      // Extract the new publication's id from any response shape
+      const newId = createResponse?.data?.id ?? createResponse?.id ?? createResponse?.publication_id;
+
+      // Auto-approve if we got an id back; otherwise treat creation as success and let admin approve manually
+      if (newId) {
+        try {
+          await adminAPI.approvePublication(String(newId));
+        } catch {
+          // Approve failed but creation succeeded — publication visible as PENDING
+        }
       }
 
-      const response = await adminAPI.createPublication(payload);
-
-      if (response.success || response.data) {
+      if (createResponse) {
         toast({ title: "Success", description: "Publication added successfully and is now active." });
         setOpen(false);
         setFormData({
@@ -433,14 +449,12 @@ export default function Publications() {
     }
 
     try {
-      const response = await adminAPI.deletePublication(id);
-      if (response.success) {
-        toast({
-          title: "Success",
-          description: "Publication deleted successfully",
-        });
-        fetchPublications();
-      }
+      await adminAPI.deletePublication(id);
+      toast({
+        title: "Success",
+        description: "Publication deleted successfully",
+      });
+      fetchPublications();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -523,21 +537,24 @@ export default function Publications() {
 
     try {
       setEditSubmitting(true);
+
+      const rawEditLink = editFormData.link_to_paper.trim();
+      const normalizedEditLink = rawEditLink && !/^https?:\/\//i.test(rawEditLink) ? `https://${rawEditLink}` : rawEditLink;
+      const editPublishedDate = editFormData.published_date || new Date().toISOString().split("T")[0];
+
       const payload: any = {
         title: editFormData.title.trim(),
-        student_authors: editFormData.authors.trim() || null,
-        published_date: editFormData.published_date || null,
+        authors: editFormData.authors.trim() || null,
+        published_date: editPublishedDate,
         conference_date: editFormData.conference_date || null,
         type_of_publication: editFormData.type_of_publication.trim() || null,
         publisher: editFormData.publisher.trim() || null,
         department: editFormData.department.trim() || null,
         institute: editFormData.institute.trim() || null,
-        link_to_paper: editFormData.link_to_paper.trim() || null,
+        link_to_paper: normalizedEditLink || null,
         venue: editFormData.venue.trim() || null,
         description: editFormData.description.trim() || null,
         category: editFormData.category.trim() || null,
-        year: editFormData.published_date ? new Date(editFormData.published_date).getFullYear() : new Date().getFullYear(),
-        publisher_photo: editFormData.publisher_photo || null,
       };
 
       if (publisherLogoId !== null) {
@@ -546,7 +563,7 @@ export default function Publications() {
 
       const response = await adminAPI.updatePublication(editingPublication.id, payload);
 
-      if (response.success || response.data) {
+      if (response) {
         toast({ title: "Success", description: "Publication updated successfully" });
         setEditOpen(false);
         setEditingPublication(null);
@@ -566,11 +583,9 @@ export default function Publications() {
 
   const handleApprovePublication = async (id: string) => {
     try {
-      const response = await adminAPI.approvePublication(id);
-      if (response.success) {
-        toast({ title: "Approved", description: "Publication approved and is now live on the website." });
-        fetchPublications();
-      }
+      await adminAPI.approvePublication(id);
+      toast({ title: "Approved", description: "Publication approved and is now live on the website." });
+      fetchPublications();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message || "Failed to approve publication" });
     }
@@ -578,11 +593,9 @@ export default function Publications() {
 
   const handleRejectRequest = async (id: string) => {
     try {
-      const response = await adminAPI.rejectPublication(id);
-      if (response.success) {
-        toast({ title: "Rejected", description: "Publication request has been rejected." });
-        fetchPublications();
-      }
+      await adminAPI.rejectPublication(id);
+      toast({ title: "Rejected", description: "Publication request has been rejected." });
+      fetchPublications();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message || "Failed to reject publication" });
     }
@@ -835,7 +848,7 @@ export default function Publications() {
 
                 <div className="space-y-2">
                   <Label className="text-[#8B735B] font-bold">
-                    Published Date <span className="text-red-500">*</span>
+                    Published Date {formData.type_of_publication !== "poster" && <span className="text-red-500">*</span>}
                   </Label>
                   <Popover open={addPublishedDateOpen} onOpenChange={setAddPublishedDateOpen}>
                     <PopoverTrigger asChild>

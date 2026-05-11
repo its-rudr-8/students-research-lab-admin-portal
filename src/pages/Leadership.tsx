@@ -1,22 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Edit, Mail } from "lucide-react";
+import { Plus, Edit, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-const leaders = [
-  { id: 1, name: "Dr. Amira Hassan", position: "Lab Director", bio: "Leading research in computational linguistics and AI ethics with 15+ years of academic experience.", initials: "AH" },
-  { id: 2, name: "Prof. David Liu", position: "Principal Investigator", bio: "Specializing in computer vision and autonomous systems. Published 80+ peer-reviewed papers.", initials: "DL" },
-  { id: 3, name: "Dr. Nadia Petrova", position: "Research Coordinator", bio: "Expert in bioinformatics and genomic data analysis. Coordinating cross-department research initiatives.", initials: "NP" },
-  { id: 4, name: "Dr. Rajan Gupta", position: "Senior Mentor", bio: "Focused on machine learning applications in healthcare and privacy-preserving systems.", initials: "RG" },
-];
+import { adminAPI } from "@/lib/adminApi";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Leadership() {
   const [open, setOpen] = useState(false);
+  const [leaders, setLeaders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchLeaders();
+  }, []);
+
+  const fetchLeaders = async () => {
+    try {
+      setLoading(true);
+      const data = await adminAPI.getLeadership();
+      setLeaders(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error fetching leadership",
+        description: error.message || "Could not load leadership data.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -49,7 +67,16 @@ export default function Leadership() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {leaders.map((leader, i) => (
+        {loading ? (
+          <div className="col-span-2 flex justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        ) : leaders.length === 0 ? (
+          <div className="col-span-2 text-center py-10 text-muted-foreground">
+            No leaders found.
+          </div>
+        ) : (
+          leaders.map((leader, i) => (
           <motion.div
             key={leader.id}
             initial={{ opacity: 0, y: 12 }}
@@ -77,7 +104,7 @@ export default function Leadership() {
               </div>
             </div>
           </motion.div>
-        ))}
+        )))}
       </div>
     </div>
   );

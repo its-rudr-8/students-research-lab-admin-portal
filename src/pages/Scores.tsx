@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Plus, Clock, Star, ChevronLeft, ChevronRight, Pencil, Trash2, X, Search, Loader2, Medal } from "lucide-react";
 import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
@@ -85,12 +85,11 @@ export default function Scores() {
     setLoading(true);
     try {
       const [scoresRes, studentsRes] = await Promise.all([adminAPI.getScores(), adminAPI.getStudents()]);
-      if (!scoresRes.success) { setLoading(false); return; }
-      
-      const rawStats = Array.isArray(scoresRes.data.leaderboardStats) ? scoresRes.data.leaderboardStats : [];
+
+      const rawStats: any[] = scoresRes?.data?.leaderboardStats ?? scoresRes?.leaderboardStats ?? parseList(scoresRes?.data ?? scoresRes);
       const stats = rawStats.map((s: any) => ({ ...s, period: normalizePeriod(s.period) }));
-      
-      setCachedStudentsData(studentsRes.data || []);
+
+      setCachedStudentsData(parseList(studentsRes));
       const months = Array.from(new Set<string>(stats.map((r: any) => r.period).filter((p: string) => p && p !== "All Time"))).sort((a, b) => monthRank(b) - monthRank(a));
       
       setMonthOptions(months);
@@ -153,7 +152,7 @@ export default function Scores() {
     setIsSaving(true);
     try {
       const res = await adminAPI.updateScore(editingScore.id, { points: formData.points, hours: formData.hours });
-      if (res.success) {
+      if (res) {
         toast({ title: "Updated" });
         setIsEditModalOpen(false);
         loadData();
@@ -167,12 +166,10 @@ export default function Scores() {
     if (!confirm("Delete this record?")) return;
     setIsSaving(true);
     try {
-      const res = await adminAPI.deleteScore(editingScore.id);
-      if (res.success) {
-        toast({ title: "Deleted" });
-        setIsEditModalOpen(false);
-        loadData();
-      }
+      await adminAPI.deleteScore(editingScore.id);
+      toast({ title: "Deleted" });
+      setIsEditModalOpen(false);
+      loadData();
     } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
     finally { setIsSaving(false); }
   };
@@ -181,7 +178,7 @@ export default function Scores() {
     setIsSaving(true);
     try {
       const res = await adminAPI.createScore({ enrollment_no: formData.enrollment_no, points: formData.points, hours: formData.hours, period: formData.period || selectedMonth });
-      if (res.success) {
+      if (res) {
         toast({ title: "Added" });
         setIsAddModalOpen(false);
         loadData();

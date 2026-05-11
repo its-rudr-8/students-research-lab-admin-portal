@@ -39,6 +39,13 @@ export const clearAuthToken = () => {
   }
 };
 
+export const parseList = (res: any): any[] => {
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.results)) return res.results;
+  return [];
+};
+
 // Helper function to make API calls
 const apiCall = async (
   endpoint: string,
@@ -74,21 +81,31 @@ const apiCall = async (
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      
+
       console.error(`[API Error] ${method} ${endpoint} - Status: ${response.status}`, errorData);
-      
+
       // Handle 401 - clear token and redirect to login
       if (response.status === 401) {
         console.error("Unauthorized (401) - clearing token and redirecting to login");
         clearAuthToken();
-        // Redirect to login page
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
         throw new Error("Session expired. Please log in again.");
       }
-      
-      throw new Error(errorData.message || `API Error: ${response.statusText}`);
+
+      // Extract error message — handle FastAPI {detail}, Django {detail/error}, or generic {message}
+      let errorMessage = errorData.message || errorData.error;
+      if (!errorMessage && errorData.detail) {
+        if (typeof errorData.detail === "string") {
+          errorMessage = errorData.detail;
+        } else if (Array.isArray(errorData.detail)) {
+          errorMessage = errorData.detail
+            .map((d: any) => `${Array.isArray(d.loc) ? d.loc.slice(-1)[0] : "field"}: ${d.msg}`)
+            .join("; ");
+        }
+      }
+      throw new Error(errorMessage || `Request failed with status ${response.status}`);
     }
 
     const data = await response.json();
@@ -306,6 +323,27 @@ export const adminAPI = {
     return apiCall(`/admin/join-requests/${id}`, "DELETE");
   },
 
+  // Member CV APIs
+  async getMemberCVByEnrollment(enrollmentNo: string) {
+    const url = `/admin/member-cv?enrollment_no=${encodeURIComponent(enrollmentNo)}`;
+    return apiCall(url, "GET");
+  },
+
+  async updateMemberCV(data: any) {
+    return apiCall("/admin/member-cv", "PUT", data);
+  },
+
+  // Leadership APIs (Mock for now until backend is ready)
+  async getLeadership() {
+    // Return mock data for now
+    return [
+      { id: 1, name: "Dr. Amira Hassan", position: "Lab Director", bio: "Leading research in computational linguistics and AI ethics with 15+ years of academic experience.", initials: "AH" },
+      { id: 2, name: "Prof. David Liu", position: "Principal Investigator", bio: "Specializing in computer vision and autonomous systems. Published 80+ peer-reviewed papers.", initials: "DL" },
+      { id: 3, name: "Dr. Nadia Petrova", position: "Research Coordinator", bio: "Expert in bioinformatics and genomic data analysis. Coordinating cross-department research initiatives.", initials: "NP" },
+      { id: 4, name: "Dr. Rajan Gupta", position: "Senior Mentor", bio: "Focused on machine learning applications in healthcare and privacy-preserving systems.", initials: "RG" },
+    ];
+  },
+
   // Achievements APIs
   async getAchievements() {
     return apiCall("/admin/achievements");
@@ -338,7 +376,7 @@ export const adminAPI = {
         headers.Authorization = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_BASE_URL}/admin/upload-image`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/upload-image`, {
         method: "POST",
         headers,
         body: formData,

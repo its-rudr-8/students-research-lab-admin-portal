@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { hasWriteAccess } from "@/lib/auth";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -66,15 +66,12 @@ export default function Activities() {
       setLoading(true);
       const response = await adminAPI.getActivities();
 
-      if (response.success && Array.isArray(response.data)) {
-        setActivities(response.data.sort((a, b) => {
-          const dateA = new Date(a.date || 0).getTime();
-          const dateB = new Date(b.date || 0).getTime();
-          return dateB - dateA;
-        }));
-      } else {
-        setActivities([]);
-      }
+      const list = parseList(response);
+      setActivities(list.sort((a, b) => {
+        const dateA = new Date(a.date || 0).getTime();
+        const dateB = new Date(b.date || 0).getTime();
+        return dateB - dateA;
+      }));
     } catch (error: any) {
       console.error('API error:', error);
       toast({
@@ -118,7 +115,7 @@ export default function Activities() {
         Photo: formData.Photo.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({
           title: "Activity added successfully",
         });
@@ -197,7 +194,7 @@ export default function Activities() {
         Photo: editFormData.Photo.trim() || null,
       });
 
-      if (response.success) {
+      if (response) {
         toast({
           title: "Activity updated successfully",
         });
@@ -225,13 +222,11 @@ export default function Activities() {
     }
 
     try {
-      const response = await adminAPI.deleteActivity(String(id));
-      if (response.success) {
-        toast({
-          title: "Activity deleted successfully",
-        });
-        fetchActivities();
-      }
+      await adminAPI.deleteActivity(String(id));
+      toast({
+        title: "Activity deleted successfully",
+      });
+      fetchActivities();
     } catch (error: any) {
       toast({
         variant: "destructive",

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import StudentAvatar from "@/components/StudentAvatar";
 import { cn } from "@/lib/utils";
 import { getStoredUser, hasWriteAccess } from "@/lib/auth";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -70,18 +70,15 @@ export default function Attendance() {
           adminAPI.getStudents()
         ]);
 
-        if (attResponse.success && Array.isArray(attResponse.data)) {
-          const uniqueDates = Array.from(new Set(attResponse.data.map((row: any) => row.period))).sort((a, b) => String(b).localeCompare(String(a))) as string[];
-          setAllDates(uniqueDates);
-          setCachedAttendanceData(attResponse.data);
-          if (uniqueDates.length > 0) {
-            setAttendanceDate(uniqueDates[0]);
-          }
+        const attList = parseList(attResponse);
+        const uniqueDates = Array.from(new Set(attList.map((row: any) => row.period))).sort((a, b) => String(b).localeCompare(String(a))) as string[];
+        setAllDates(uniqueDates);
+        setCachedAttendanceData(attList);
+        if (uniqueDates.length > 0) {
+          setAttendanceDate(uniqueDates[0]);
         }
 
-        if (stuResponse.success && Array.isArray(stuResponse.data)) {
-          setCachedStudentsData(stuResponse.data);
-        }
+        setCachedStudentsData(parseList(stuResponse));
 
         setLoading(false);
       } catch (error) {
@@ -191,10 +188,10 @@ export default function Attendance() {
 
       // Refresh the dates list
       const response = await adminAPI.getAttendance();
-      if (response.success && Array.isArray(response.data)) {
-        const uniqueDates = Array.from(new Set(response.data.map((row: any) => row.date))).sort((a, b) => String(b).localeCompare(String(a))) as string[];
-        setAllDates(uniqueDates);
-      }
+      const refreshedList = parseList(response);
+      const uniqueDates = Array.from(new Set(refreshedList.map((row: any) => row.period))).sort((a, b) => String(b).localeCompare(String(a))) as string[];
+      setAllDates(uniqueDates);
+      setCachedAttendanceData(refreshedList);
     } catch (error: any) {
       setAddError(error.message || "Failed to add attendance");
     }
