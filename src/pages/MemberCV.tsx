@@ -89,6 +89,21 @@ const getBatchString = (member: any) => {
   return `Batch ${startYear}-${startYear + 4}`;
 };
 
+const TextSection = ({ label, field, placeholder, hint, formData, setFormData, disabled }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string; formData: CVFormData; setFormData: React.Dispatch<React.SetStateAction<CVFormData>>; disabled: boolean }) => (
+  <div className="space-y-2">
+    <div className="flex items-center justify-between">
+      <h3 className="text-base font-bold text-[#1a1810]">{label}</h3>
+      {hint && <span className="text-[11px] text-muted-foreground italic">{hint}</span>}
+    </div>
+    <Textarea
+      value={formData[field] as string}
+      onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
+      placeholder={placeholder}
+      className="bg-white border-[#D4C9B6] rounded-xl min-h-[80px] text-sm"
+      disabled={disabled}
+    />
+  </div>
+);
 
 export default function MemberCV() {
   const [members, setMembers] = useState<MemberRecord[]>([]);
@@ -255,22 +270,7 @@ export default function MemberCV() {
     return { completed, total, percent: Math.round((completed / total) * 100) };
   }, [formData]);
 
-  // Helper: textarea section
-  const TextSection = ({ label, field, placeholder, hint }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string }) => (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-[#1a1810]">{label}</h3>
-        {hint && <span className="text-[11px] text-muted-foreground italic">{hint}</span>}
-      </div>
-      <Textarea
-        value={formData[field] as string}
-        onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
-        placeholder={placeholder}
-        className="bg-white border-[#D4C9B6] rounded-xl min-h-[80px] text-sm"
-        disabled={!canEditSelected}
-      />
-    </div>
-  );
+  // Removed inline TextSection
 
   const handleSave = async () => {
     if (!selectedMember || !selectedEnrollment)
@@ -487,21 +487,21 @@ export default function MemberCV() {
 
             <div className="border-t border-dashed border-[#D4C9B6]" />
 
-            <TextSection label="🔬 Research Areas" field="research_areas" placeholder="Cloud Computing Optimization&#10;Microservices Architecture" hint="One per line" />
-            <TextSection label="📁 Research Work" field="research_work" placeholder="Ongoing Research Paper: NLP Study&#10;Completed: Smart Parking System" hint="Prefix with 'Ongoing' for badge · one per line" />
-            <TextSection label="📄 Research Papers Published" field="research_papers" placeholder="Paper Title, Journal Name, 2024" hint="One per line" />
-            <TextSection label="🏆 Hackathons" field="hackathons" placeholder="Smart India Hackathon 2024 - Runner Up" hint="One per line" />
+            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🔬 Research Areas" field="research_areas" placeholder="Cloud Computing Optimization&#10;Microservices Architecture" hint="One per line" />
+            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📁 Research Work" field="research_work" placeholder="Ongoing Research Paper: NLP Study&#10;Completed: Smart Parking System" hint="Prefix with 'Ongoing' for badge · one per line" />
+            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📄 Research Papers Published" field="research_papers" placeholder="Paper Title, Journal Name, 2024" hint="One per line" />
+            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🏆 Hackathons" field="hackathons" placeholder="Smart India Hackathon 2024 - Runner Up" hint="One per line" />
 
             <div className="border-t border-dashed border-[#D4C9B6]" />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <TextSection label="🏅 Leadership" field="leadership" placeholder="Lab Coordinator, SRL 2024" hint="One per line" />
-              <TextSection label="🎖️ Awards" field="awards" placeholder="Best Presenter Award" hint="One per line" />
+              <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🏅 Leadership" field="leadership" placeholder="Lab Coordinator, SRL 2024" hint="One per line" />
+              <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🎖️ Awards" field="awards" placeholder="Best Presenter Award" hint="One per line" />
             </div>
-            <TextSection label="📜 Certifications" field="certifications" placeholder="AWS Cloud Practitioner&#10;Google ML Crash Course" hint="One per line — displayed as chips" />
+            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📜 Certifications" field="certifications" placeholder="AWS Cloud Practitioner&#10;Google ML Crash Course" hint="One per line — displayed as chips" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <TextSection label="💼 Internships" field="internships" placeholder="Software Intern, XYZ Corp, Summer 2024" hint="One per line" />
-              <TextSection label="⭐ Additional Achievements" field="additional_achievements" placeholder="Published article in campus newsletter" hint="One per line" />
+              <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="💼 Internships" field="internships" placeholder="Software Intern, XYZ Corp, Summer 2024" hint="One per line" />
+              <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="⭐ Additional Achievements" field="additional_achievements" placeholder="Published article in campus newsletter" hint="One per line" />
             </div>
           </div>
           
