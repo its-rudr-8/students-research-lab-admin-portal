@@ -101,8 +101,8 @@ function Dashboard() {
         const activityList = Array.isArray(activitiesResponse) ? activitiesResponse : activitiesResponse?.data;
         if (Array.isArray(activityList)) setSessionsConducted(activityList.length);
 
-        const researchList = Array.isArray(researchResponse) ? researchResponse : researchResponse?.data;
-        if (Array.isArray(researchList)) setResearchCount(researchList.length);
+        // Research count logic was previously tied to a removed module
+        // We will now derive it from the leaderboard data below for better consistency
 
         const achieveList = Array.isArray(achievementsResponse) ? achievementsResponse : achievementsResponse?.data;
         if (Array.isArray(achieveList)) setRecentAchievements(achieveList.slice(0, 3));
@@ -120,7 +120,12 @@ function Dashboard() {
             else map.get(id).score += score;
           });
           const aggregatedCumulative = Array.from(map.values()).sort((a, b) => b.score - a.score);
-          const formattedCumulative = aggregatedCumulative.filter(isValidMember).slice(0, 5).map((s: any) => {
+          const filteredCumulative = aggregatedCumulative.filter(isValidMember);
+          
+          // Update total researchers count from the active leaderboard participants
+          setResearchCount(filteredCumulative.length);
+
+          const formattedCumulative = filteredCumulative.slice(0, 5).map((s: any) => {
             const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
             return { name: formatName(fullName), score: Math.round(s.score), originalName: fullName, image: s.image || s.photo_url || s.photoUrl || s.photo };
           });
