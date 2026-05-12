@@ -45,11 +45,14 @@ export default function Login() {
 
       // Save session data
       const user = response.user;
+      // Backend may return enrollment_no (snake_case) or enrollmentNo (camelCase)
+      const enrollmentNo: string | undefined =
+        user.enrollmentNo || user.enrollment_no || undefined;
       saveSession({
         email: user.email,
         name: user.name,
-        enrollmentNo: user.enrollmentNo,
-        role: user.role || "member",
+        enrollmentNo,
+        role: user.is_admin ? "admin" : (user.role || "member"),
       }, response.token);
 
       toast({

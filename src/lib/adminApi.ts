@@ -55,6 +55,7 @@ const apiCall = async (
   const token = getAuthToken();
   const headers: HeadersInit = {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
   };
 
   if (token) {
@@ -135,23 +136,38 @@ export const adminAPI = {
     ]);
 
     const leaderboard = leaderboardRes?.leaderboard || (Array.isArray(leaderboardRes) ? leaderboardRes : []);
-    const imageMap = new Map();
+
+    // Two maps: by normalized enrollment_no and by name-slug, for robust fallback
+    const imageByEnrollment = new Map<string, string>();
+    const imageByNameSlug = new Map<string, string>();
+    const toSlug = (s: string) =>
+      s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
     leaderboard.forEach((r: any) => {
-      if (r.enrollment_no && (r.photo || r.image || r.photo_url || r.photoUrl)) {
-        imageMap.set(r.enrollment_no, r.photo || r.image || r.photo_url || r.photoUrl);
-      }
+      const url = r.photo || r.image || r.photo_url || r.photoUrl || r.profile_image || r.avatar || r.picture;
+      if (!url) return;
+      if (r.enrollment_no) imageByEnrollment.set(String(r.enrollment_no).toUpperCase(), url);
+      const name = r.student_name || r.name;
+      if (name) imageByNameSlug.set(toSlug(name), url);
     });
 
+    const resolvePhoto = (s: any): string => {
+      const direct = s.photo_url || s.image || s.photo || s.photoUrl || s.profile_image || s.avatar;
+      if (direct) return direct;
+      const byEnrollment = imageByEnrollment.get(String(s.enrollment_no || "").toUpperCase());
+      if (byEnrollment) return byEnrollment;
+      const name = s.student_name || s.name || "";
+      if (name) {
+        const byName = imageByNameSlug.get(toSlug(name));
+        if (byName) return byName;
+      }
+      return "";
+    };
+
     if (res && Array.isArray(res.data)) {
-      res.data = res.data.map((s: any) => ({
-        ...s,
-        photo_url: s.photo_url || s.image || s.photo || s.photoUrl || imageMap.get(s.enrollment_no)
-      }));
+      res.data = res.data.map((s: any) => ({ ...s, photo_url: resolvePhoto(s) }));
     } else if (Array.isArray(res)) {
-      return res.map((s: any) => ({
-        ...s,
-        photo_url: s.photo_url || s.image || s.photo || s.photoUrl || imageMap.get(s.enrollment_no)
-      }));
+      return res.map((s: any) => ({ ...s, photo_url: resolvePhoto(s) }));
     }
     return res;
   },
@@ -324,13 +340,25 @@ export const adminAPI = {
   },
 
   // Member CV APIs
+  /** Fetch a single member's CV profile by enrollment number.
+   * Returns the profile data object (or null if no profile exists yet). */
   async getMemberCVByEnrollment(enrollmentNo: string) {
     const url = `/admin/member-cv?enrollment_no=${encodeURIComponent(enrollmentNo)}`;
-    return apiCall(url, "GET");
+    const res = await apiCall(url, "GET");
+    // Backend returns { success, data } — unwrap to data (may be null)
+    return res?.data ?? null;
   },
 
+  /** Save / update a member's CV profile (PUT /api/admin/member-cv). */
   async updateMemberCV(data: any) {
     return apiCall("/admin/member-cv", "PUT", data);
+  },
+
+  /** Admin-only: Fetch all member CV profiles (GET /api/admin/member-cv/all). */
+  async getAllMemberCVs() {
+    const res = await apiCall("/admin/member-cv/all", "GET");
+    // Backend returns { success, count, data: [...] } — unwrap to the array
+    return Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
   },
 
   // Leadership APIs (Mock for now until backend is ready)
