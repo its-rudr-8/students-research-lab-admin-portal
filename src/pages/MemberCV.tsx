@@ -1,16 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2, Search, Pencil, Edit3, Settings2, Shield, Eye, CheckCircle2, AlertCircle, Users, ArrowLeft, X, FileText, Award, Folder, Trophy, Edit2, Check, ArrowRight } from "lucide-react";
+import { Loader2, Search, Pencil, FileText, Award, Folder, Trophy, Edit2, Check, ArrowLeft, ArrowRight, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
+
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
-import { adminAPI } from "@/lib/adminApi";
+import { adminAPI, parseList } from "@/lib/adminApi";
 import { getStoredUser } from "@/lib/auth";
 
 type MemberRecord = {
@@ -28,90 +26,69 @@ type MemberRecord = {
   verified?: boolean;
 };
 
-type HackathonItem = {
-  name: string;
-  level: string;
-  result: string;
-  year: string;
-  details: string;
-};
 
-type ResearchPaperItem = {
-  title: string;
-  journal: string;
-  year: string;
-  doi: string;
-};
 
-type LeadershipItem = {
-  title: string;
-  role: string;
-  year: string;
-  description: string;
-};
 
 type CVFormData = {
-  knowledge_domains: string;
-  hackathons: HackathonItem[];
-  research_papers: ResearchPaperItem[];
-  leadership_awards: LeadershipItem[];
-  execution_ongoing: number;
-  execution_hacks: number;
-  execution_papers: number;
+  // identity
+  student_name: string;
+  linkedin_id: string;
+  semester: string;
+  department: string;
+  institute: string;
+  organization: string;
+  reflection: string;
+  // array fields (one item per line in textarea)
+  research_areas: string;
+  research_work: string;
+  hackathons: string;
+  research_papers: string;
+  leadership: string;
+  awards: string;
+  certifications: string;
+  additional_achievements: string;
+  internships: string;
 };
-
-const emptyHackathon = (): HackathonItem => ({ name: "", level: "", result: "", year: "", details: "" });
-const emptyResearchPaper = (): ResearchPaperItem => ({ title: "", journal: "", year: "", doi: "" });
-const emptyLeadership = (): LeadershipItem => ({ title: "", role: "", year: "", description: "" });
 
 const emptyFormData = (): CVFormData => ({
-  knowledge_domains: "",
-  hackathons: [emptyHackathon()],
-  research_papers: [emptyResearchPaper()],
-  leadership_awards: [emptyLeadership()],
-  execution_ongoing: 0,
-  execution_hacks: 0,
-  execution_papers: 0,
+  student_name: "",
+  linkedin_id: "",
+  semester: "",
+  department: "",
+  institute: "",
+  organization: "",
+  reflection: "",
+  research_areas: "",
+  research_work: "",
+  hackathons: "",
+  research_papers: "",
+  leadership: "",
+  awards: "",
+  certifications: "",
+  additional_achievements: "",
+  internships: "",
 });
 
-const toHackathons = (value: unknown): HackathonItem[] => {
-  if (!Array.isArray(value) || value.length === 0) return [emptyHackathon()];
-  return value.map((item: any) => ({
-    name: String(item?.name || ""), level: String(item?.level || ""), result: String(item?.result || ""),
-    year: String(item?.year || ""), details: String(item?.details || ""),
-  })).slice(0, 1);
-};
+// Convert a string[] from the API to newline-separated textarea string
+const arrToText = (arr: unknown): string =>
+  Array.isArray(arr) ? arr.join("\n") : "";
 
-const toPapers = (value: unknown): ResearchPaperItem[] => {
-  if (!Array.isArray(value) || value.length === 0) return [emptyResearchPaper()];
-  return value.map((item: any) => ({
-    title: String(item?.title || ""), journal: String(item?.journal || ""),
-    year: String(item?.year || ""), doi: String(item?.doi || ""),
-  })).slice(0, 1);
-};
+// Convert a textarea string back to a string[]
+const textToArr = (s: string): string[] =>
+  s.split("\n").map((l) => l.trim()).filter(Boolean);
 
-const toLeadership = (value: unknown): LeadershipItem[] => {
-  if (!Array.isArray(value) || value.length === 0) return [emptyLeadership()];
-  return value.map((item: any) => ({
-    title: String(item?.title || ""), role: String(item?.role || ""),
-    year: String(item?.year || ""), description: String(item?.description || ""),
-  })).slice(0, 1);
-};
 
 const getBatchString = (member: any) => {
   const name = member.student_name || "";
-  if (name.toLowerCase().includes("poojan ghetiya")) {
-    return "Batch 2025-2029";
-  }
-
+  if (name.toLowerCase().includes("poojan ghetiya")) return "Batch 2025-2029";
   const enrollmentNo = member.enrollment_no;
   if (!enrollmentNo || enrollmentNo.length < 2) return "Other";
   const prefix = parseInt(enrollmentNo.substring(0, 2), 10);
   if (isNaN(prefix) || prefix < 10 || prefix > 99) return "Other";
   const startYear = 2000 + prefix;
-  const endYear = startYear + 4;
-  return `Batch ${startYear}-${endYear}`;
+  return `Batch ${startYear}-${startYear + 4}`;
 };
+
 
 export default function MemberCV() {
   const [members, setMembers] = useState<MemberRecord[]>([]);
@@ -158,17 +135,36 @@ export default function MemberCV() {
     const fetchMembers = async () => {
       try {
         setLoadingMembers(true);
-        const data = await adminAPI.getStudents();
-        const fetchedMembers = (data || [])
+        const [res, allCVs] = await Promise.all([
+          adminAPI.getStudents(),
+          isAdmin ? adminAPI.getAllMemberCVs().catch(() => []) : Promise.resolve([]),
+        ]);
+
+        // Build enrollment_no → computed CV stats map (admin grid only)
+        const cvMap = new Map<string, { ongoing: number; hacks: number; papers: number }>();
+        (allCVs as any[]).forEach((cv: any) => {
+          if (!cv?.enrollment_no) return;
+          const rw: string[] = Array.isArray(cv.research_work) ? cv.research_work : [];
+          cvMap.set(cv.enrollment_no, {
+            ongoing: rw.filter((w: string) => w.trim().toLowerCase().startsWith("ongoing")).length,
+            hacks: Array.isArray(cv.hackathons) ? cv.hackathons.length : 0,
+            papers: Array.isArray(cv.research_papers) ? cv.research_papers.length : 0,
+          });
+        });
+
+        // getStudents() may return {success, data:[...]} or an array directly
+        const fetchedMembers = parseList(res)
           .filter((row: any) => row.enrollment_no && String(row.member_type || "member").toLowerCase() !== "admin")
-          .map((row: any) => ({
-             ...row,
-             cv_completion: row.cv_completion || 0,
-             hacks: row.execution_hacks || 0,
-             papers: row.execution_papers || 0,
-             ongoing: row.execution_ongoing || 0,
-             verified: row.verified || false,
-          }));
+          .map((row: any) => {
+            const cv = cvMap.get(row.enrollment_no);
+            return {
+              ...row,
+              hacks: cv?.hacks ?? row.execution_hacks ?? 0,
+              papers: cv?.papers ?? row.execution_papers ?? 0,
+              ongoing: cv?.ongoing ?? row.execution_ongoing ?? 0,
+              verified: row.verified || false,
+            };
+          });
 
         if (!currentUser) {
           setMembers([]);
@@ -178,7 +174,6 @@ export default function MemberCV() {
 
         if (isAdmin) {
           setMembers(fetchedMembers);
-          // For admin, start in grid view
           setSelectedEnrollment("");
           setShowGrid(true);
         } else {
@@ -186,7 +181,7 @@ export default function MemberCV() {
           const ownProfile = fetchedMembers.filter((row: any) => row.enrollment_no === ownEnrollment);
           setMembers(ownProfile);
           setSelectedEnrollment(ownProfile[0]?.enrollment_no || "");
-          setShowGrid(false); // Normal members don't see grid
+          setShowGrid(false);
         }
       } catch (error: any) {
         toast({
@@ -198,7 +193,6 @@ export default function MemberCV() {
         setLoadingMembers(false);
       }
     };
-
     fetchMembers();
   }, [currentUser, isAdmin]);
 
@@ -208,22 +202,31 @@ export default function MemberCV() {
         setFormData(emptyFormData());
         return;
       }
-
       try {
         setLoadingProfile(true);
-        const data = await adminAPI.getMemberCVByEnrollment(selectedEnrollment);
-        if (!data) {
+        // getMemberCVByEnrollment now returns the unwrapped data object (or null)
+        const d = await adminAPI.getMemberCVByEnrollment(selectedEnrollment);
+        if (!d) {
           setFormData(emptyFormData());
           return;
         }
         setFormData({
-          knowledge_domains: String(data.knowledge_domains || data.research_area || ""),
-          hackathons: toHackathons(data.hackathons),
-          research_papers: toPapers(data.research_papers),
-          leadership_awards: toLeadership(data.leadership_awards || data.patents),
-          execution_ongoing: Number(data.execution_ongoing || 0),
-          execution_hacks: Number(data.execution_hacks || 0),
-          execution_papers: Number(data.execution_papers || 0),
+          student_name: String(d.student_name || ""),
+          linkedin_id: String(d.linkedin_id || ""),
+          semester: d.semester != null ? String(d.semester) : "",
+          department: String(d.department || ""),
+          institute: String(d.institute || ""),
+          organization: String(d.organization || ""),
+          reflection: String(d.reflection || ""),
+          research_areas: arrToText(d.research_areas),
+          research_work: arrToText(d.research_work),
+          hackathons: arrToText(d.hackathons),
+          research_papers: arrToText(d.research_papers),
+          leadership: arrToText(d.leadership),
+          awards: arrToText(d.awards),
+          certifications: arrToText(d.certifications),
+          additional_achievements: arrToText(d.additional_achievements),
+          internships: arrToText(d.internships),
         });
       } catch (error: any) {
         toast({
@@ -235,54 +238,69 @@ export default function MemberCV() {
         setLoadingProfile(false);
       }
     };
-
     fetchProfile();
   }, [selectedEnrollment]);
-
-  // Handle Updates
-  const updateHackathon = (index: number, key: keyof HackathonItem, value: string) => {
-    setFormData((prev) => { const next = [...prev.hackathons]; next[index] = { ...next[index], [key]: value }; return { ...prev, hackathons: next }; });
-  };
-  const updatePaper = (index: number, key: keyof ResearchPaperItem, value: string) => {
-    setFormData((prev) => { const next = [...prev.research_papers]; next[index] = { ...next[index], [key]: value }; return { ...prev, research_papers: next }; });
-  };
-  const updateLeadership = (index: number, key: keyof LeadershipItem, value: string) => {
-    setFormData((prev) => { const next = [...prev.leadership_awards]; next[index] = { ...next[index], [key]: value }; return { ...prev, leadership_awards: next }; });
-  };
 
   const canEditSelected = !!selectedEnrollment && (!!isAdmin || (currentUser?.enrollmentNo && currentUser.enrollmentNo === selectedEnrollment));
 
   const profileCompletion = useMemo(() => {
     const sections = [
-      formData.knowledge_domains.trim().length > 0,
-      formData.hackathons.some((item) => item.name.trim().length > 0), 
-      formData.research_papers.some((item) => item.title.trim().length > 0),
-      formData.leadership_awards.some((item) => item.title.trim().length > 0), 
+      formData.reflection.trim().length > 0,
+      formData.research_work.trim().length > 0,
+      formData.hackathons.trim().length > 0,
+      formData.research_papers.trim().length > 0,
     ];
     const completed = sections.filter(Boolean).length;
     const total = sections.length;
     return { completed, total, percent: Math.round((completed / total) * 100) };
   }, [formData]);
 
-  const handleSave = async () => {
-    if (!selectedMember || !selectedEnrollment) return toast({ variant: "destructive", title: "No profile selected", description: "Please select a member profile first." });
-    if (!canEditSelected) return toast({ variant: "destructive", title: "Permission denied", description: "You can edit only your own profile." });
+  // Helper: textarea section
+  const TextSection = ({ label, field, placeholder, hint }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string }) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-bold text-[#1a1810]">{label}</h3>
+        {hint && <span className="text-[11px] text-muted-foreground italic">{hint}</span>}
+      </div>
+      <Textarea
+        value={formData[field] as string}
+        onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
+        placeholder={placeholder}
+        className="bg-white border-[#D4C9B6] rounded-xl min-h-[80px] text-sm"
+        disabled={!canEditSelected}
+      />
+    </div>
+  );
 
+  const handleSave = async () => {
+    if (!selectedMember || !selectedEnrollment)
+      return toast({ variant: "destructive", title: "No profile selected", description: "Please select a member profile first." });
+    if (!canEditSelected)
+      return toast({ variant: "destructive", title: "Permission denied", description: "You can edit only your own profile." });
     try {
       setSaving(true);
+      const semInt = parseInt(formData.semester, 10);
       const payload = {
-        enrollment_no: selectedEnrollment, student_name: selectedMember.student_name,
-        knowledge_domains: formData.knowledge_domains,
-        hackathons: formData.hackathons, 
-        research_papers: formData.research_papers, 
-        leadership_awards: formData.leadership_awards, 
-        execution_ongoing: formData.execution_ongoing,
-        execution_hacks: formData.execution_hacks,
-        execution_papers: formData.execution_papers,
-        updated_by: currentUser?.email || null,
+        enrollment_no: selectedEnrollment,
+        student_name: formData.student_name || selectedMember.student_name,
+        linkedin_id: formData.linkedin_id,
+        semester: isNaN(semInt) ? undefined : semInt,
+        department: formData.department,
+        institute: formData.institute,
+        organization: formData.organization,
+        reflection: formData.reflection,
+        research_areas: textToArr(formData.research_areas),
+        research_work: textToArr(formData.research_work),
+        hackathons: textToArr(formData.hackathons),
+        research_papers: textToArr(formData.research_papers),
+        leadership: textToArr(formData.leadership),
+        awards: textToArr(formData.awards),
+        certifications: textToArr(formData.certifications),
+        additional_achievements: textToArr(formData.additional_achievements),
+        internships: textToArr(formData.internships),
       };
       await adminAPI.updateMemberCV(payload);
-      toast({ title: "Profile saved", description: `CV profile updated for ${selectedMember.student_name}.` });
+      toast({ title: "Profile saved", description: `CV updated for ${selectedMember.student_name}.` });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save failed", description: error.message || "Could not save profile." });
     } finally {
@@ -436,173 +454,79 @@ export default function MemberCV() {
         <div className="glass-card rounded-2xl p-5 sm:p-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" /> Loading profile...</div>
       ) : (
         <div className="space-y-6 pb-24">
-          {/* Main Content Card */}
-          <div className="bg-[#F3F0E8] rounded-[24px] p-6 sm:p-10 border border-[#D4C9B6] shadow-sm space-y-12">
-            
-            {/* 1. Knowledge Domains */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold text-[#1a1810]">1. Knowledge Domains</h3>
-              <Textarea value={formData.knowledge_domains} onChange={(e) => setFormData((prev) => ({ ...prev, knowledge_domains: e.target.value }))} placeholder="Example: Machine Learning, Cyber Security, Distributed Systems..." className="bg-white border-[#D4C9B6] rounded-xl min-h-20" disabled={!canEditSelected} />
-            </div>
+          {/* Main Form Card */}
+          <div className="bg-[#F3F0E8] rounded-[24px] p-6 sm:p-10 border border-[#D4C9B6] shadow-sm space-y-8">
 
-            {/* 2. Hackathons & Achievements */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-bold text-[#1a1810]">2. Hackathons & Achievements 🏆</h3>
-                <Button type="button" className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-5 shadow-sm" onClick={() => setFormData((prev) => ({ ...prev, hackathons: [...prev.hackathons, emptyHackathon()] }))} disabled={!canEditSelected}><Plus className="w-4 h-4 mr-2" /> Add Item</Button>
+            {/* Identity row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">LinkedIn URL</Label>
+                <Input value={formData.linkedin_id} onChange={(e) => setFormData(p => ({ ...p, linkedin_id: e.target.value }))} placeholder="https://linkedin.com/in/..." className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
               </div>
-              <div className="border border-[#D4C9B6] rounded-2xl overflow-x-auto bg-white shadow-sm">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-[#EDE8DE] text-muted-foreground text-xs font-semibold border-b border-[#D4C9B6]">
-                    <tr>
-                      <th className="px-4 py-3 w-12 text-center">Type</th>
-                      <th className="px-4 py-3 min-w-[200px]">Hackathon Title</th>
-                      <th className="px-4 py-3 min-w-[150px]">Level</th>
-                      <th className="px-4 py-3 w-24">Year</th>
-                      <th className="px-4 py-3 min-w-[150px]">Result/Details</th>
-                      <th className="px-4 py-3 w-24 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#D4C9B6]">
-                    {formData.hackathons.map((item, index) => (
-                      <tr key={index} className="hover:bg-[#F3F0E8] transition-colors group">
-                        <td className="px-4 py-3 text-center text-[#2A5D4B]"><Trophy className="w-5 h-5 mx-auto opacity-70" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.name} onChange={(e) => updateHackathon(index, "name", e.target.value)} disabled={!canEditSelected} placeholder="Enter title" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.level} onChange={(e) => updateHackathon(index, "level", e.target.value)} disabled={!canEditSelected} placeholder="Level" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.year} onChange={(e) => updateHackathon(index, "year", e.target.value)} disabled={!canEditSelected} placeholder="Year" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.result} onChange={(e) => updateHackathon(index, "result", e.target.value)} disabled={!canEditSelected} placeholder="Result" /></td>
-                        <td className="px-4 py-3 text-right">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setFormData((prev) => ({ ...prev, hackathons: prev.hackathons.filter((_, i) => i !== index) || [emptyHackathon()] }))} disabled={!canEditSelected || formData.hackathons.length <= 1}><Trash2 className="w-4 h-4" /></Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Semester</Label>
+                  <Input type="number" min={1} max={8} value={formData.semester} onChange={(e) => setFormData(p => ({ ...p, semester: e.target.value }))} placeholder="6" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Dept</Label>
+                  <Input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="CE" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Institute</Label>
+                  <Input value={formData.institute} onChange={(e) => setFormData(p => ({ ...p, institute: e.target.value }))} placeholder="CHARUSAT" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
+                </div>
               </div>
             </div>
 
-            {/* 3. Papers Published & Year */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-bold text-[#1a1810]">3. Papers Published & Year 📄</h3>
-                <Button type="button" className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-5 shadow-sm" onClick={() => setFormData((prev) => ({ ...prev, research_papers: [...prev.research_papers, emptyResearchPaper()] }))} disabled={!canEditSelected}><Plus className="w-4 h-4 mr-2" /> Add Paper</Button>
-              </div>
-              <div className="border border-[#D4C9B6] rounded-2xl overflow-x-auto bg-white shadow-sm">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-[#EDE8DE] text-muted-foreground text-xs font-semibold border-b border-[#D4C9B6]">
-                    <tr>
-                      <th className="px-4 py-3 w-12 text-center">Type</th>
-                      <th className="px-4 py-3 min-w-[200px]">Paper Title</th>
-                      <th className="px-4 py-3 min-w-[150px]">Journal/Conference</th>
-                      <th className="px-4 py-3 w-24">Year</th>
-                      <th className="px-4 py-3 min-w-[150px]">DOI/Link</th>
-                      <th className="px-4 py-3 w-24 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#D4C9B6]">
-                    {formData.research_papers.map((item, index) => (
-                      <tr key={index} className="hover:bg-[#F3F0E8] transition-colors group">
-                        <td className="px-4 py-3 text-center text-[#2A5D4B]"><FileText className="w-5 h-5 mx-auto opacity-70" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.title} onChange={(e) => updatePaper(index, "title", e.target.value)} disabled={!canEditSelected} placeholder="Paper title" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.journal} onChange={(e) => updatePaper(index, "journal", e.target.value)} disabled={!canEditSelected} placeholder="Journal" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.year} onChange={(e) => updatePaper(index, "year", e.target.value)} disabled={!canEditSelected} placeholder="Year" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.doi} onChange={(e) => updatePaper(index, "doi", e.target.value)} disabled={!canEditSelected} placeholder="Link" /></td>
-                        <td className="px-4 py-3 text-right flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-[#2A5D4B]"><Edit2 className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setFormData((prev) => ({ ...prev, research_papers: prev.research_papers.filter((_, i) => i !== index) || [emptyResearchPaper()] }))} disabled={!canEditSelected || formData.research_papers.length <= 1}><Trash2 className="w-4 h-4" /></Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            {/* Reflection */}
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-[#1a1810]">✍️ Personal Reflection</h3>
+              <Textarea value={formData.reflection} onChange={(e) => setFormData(p => ({ ...p, reflection: e.target.value }))} placeholder="Research has taught me..." className="bg-white border-[#D4C9B6] rounded-xl min-h-[90px] text-sm italic" disabled={!canEditSelected} />
             </div>
 
-            {/* 4. Leadership & Awards */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-lg font-bold text-[#1a1810]">4. Leadership & Awards 🏅</h3>
-                <Button type="button" className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-5 shadow-sm" onClick={() => setFormData((prev) => ({ ...prev, leadership_awards: [...prev.leadership_awards, emptyLeadership()] }))} disabled={!canEditSelected}><Plus className="w-4 h-4 mr-2" /> Add Record</Button>
-              </div>
-              <div className="border border-[#D4C9B6] rounded-2xl overflow-x-auto bg-white shadow-sm">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-[#EDE8DE] text-muted-foreground text-xs font-semibold border-b border-[#D4C9B6]">
-                    <tr>
-                      <th className="px-4 py-3 w-12 text-center">Type</th>
-                      <th className="px-4 py-3 min-w-[200px]">Award / Position Title</th>
-                      <th className="px-4 py-3 min-w-[150px]">Role / Issuer</th>
-                      <th className="px-4 py-3 w-24">Year</th>
-                      <th className="px-4 py-3 min-w-[150px]">Short Description</th>
-                      <th className="px-4 py-3 w-24 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#D4C9B6]">
-                    {formData.leadership_awards.map((item, index) => (
-                      <tr key={index} className="hover:bg-[#F3F0E8] transition-colors group">
-                        <td className="px-4 py-3 text-center text-amber-600"><Award className="w-5 h-5 mx-auto opacity-70" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.title} onChange={(e) => updateLeadership(index, "title", e.target.value)} disabled={!canEditSelected} placeholder="Title" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.role} onChange={(e) => updateLeadership(index, "role", e.target.value)} disabled={!canEditSelected} placeholder="Issuer" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.year} onChange={(e) => updateLeadership(index, "year", e.target.value)} disabled={!canEditSelected} placeholder="Year" /></td>
-                        <td className="px-2 py-2"><Input className="h-9 text-sm border-transparent hover:border-[#D4C9B6] focus:border-[#2A5D4B] bg-transparent shadow-none" value={item.description} onChange={(e) => updateLeadership(index, "description", e.target.value)} disabled={!canEditSelected} placeholder="Description" /></td>
-                        <td className="px-4 py-3 text-right flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-[#2A5D4B]"><Edit2 className="w-3.5 h-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setFormData((prev) => ({ ...prev, leadership_awards: prev.leadership_awards.filter((_, i) => i !== index) || [emptyLeadership()] }))} disabled={!canEditSelected || formData.leadership_awards.length <= 1}><Trash2 className="w-4 h-4" /></Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="border-t border-dashed border-[#D4C9B6]" />
+
+            <TextSection label="🔬 Research Areas" field="research_areas" placeholder="Cloud Computing Optimization&#10;Microservices Architecture" hint="One per line" />
+            <TextSection label="📁 Research Work" field="research_work" placeholder="Ongoing Research Paper: NLP Study&#10;Completed: Smart Parking System" hint="Prefix with 'Ongoing' for badge · one per line" />
+            <TextSection label="📄 Research Papers Published" field="research_papers" placeholder="Paper Title, Journal Name, 2024" hint="One per line" />
+            <TextSection label="🏆 Hackathons" field="hackathons" placeholder="Smart India Hackathon 2024 - Runner Up" hint="One per line" />
+
+            <div className="border-t border-dashed border-[#D4C9B6]" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <TextSection label="🏅 Leadership" field="leadership" placeholder="Lab Coordinator, SRL 2024" hint="One per line" />
+              <TextSection label="🎖️ Awards" field="awards" placeholder="Best Presenter Award" hint="One per line" />
+            </div>
+            <TextSection label="📜 Certifications" field="certifications" placeholder="AWS Cloud Practitioner&#10;Google ML Crash Course" hint="One per line — displayed as chips" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <TextSection label="💼 Internships" field="internships" placeholder="Software Intern, XYZ Corp, Summer 2024" hint="One per line" />
+              <TextSection label="⭐ Additional Achievements" field="additional_achievements" placeholder="Published article in campus newsletter" hint="One per line" />
             </div>
           </div>
-
-          {/* 5. Execution Analytics (Preview) */}
+          
           <div className="bg-[#DAEBE1] rounded-[24px] p-6 sm:p-8 mt-6 border border-[#a8dbc0] shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/40 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
-            <h3 className="text-[#21493A] font-bold text-lg mb-6 relative z-10">5. Execution Analytics (Preview)</h3>
+            <h3 className="text-[#21493A] font-bold text-lg mb-6 relative z-10">5. Execution Analytics</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
-              {/* Ongoing Projects */}
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
-                  <Folder className="w-6 h-6 text-[#2A5D4B]" />
-                </div>
+                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0"><Folder className="w-6 h-6 text-[#2A5D4B]" /></div>
                 <div>
-                  <div className="flex items-baseline">
-                    <span className="text-3xl font-bold text-[#21493A]">[</span>
-                    <Input type="number" min="0" value={formData.execution_ongoing} onChange={(e) => setFormData((prev) => ({ ...prev, execution_ongoing: parseInt(e.target.value) || 0 }))} disabled={!canEditSelected} className="w-8 h-8 text-center text-xl font-bold text-[#21493A] bg-transparent border-none p-0 focus:ring-0 shadow-none mx-0.5 [&::-webkit-inner-spin-button]:appearance-none" />
-                    <span className="text-3xl font-bold text-[#21493A]">]</span>
-                    <span className="text-[10px] text-[#2A5D4B] font-medium ml-1.5 flex items-center"><Edit2 className="w-3 h-3 mr-0.5" /> Edit</span>
-                  </div>
+                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_work.split("\n").filter(l => l.trim().toLowerCase().startsWith("ongoing")).length}</p>
                   <p className="text-sm font-medium text-[#2A5D4B]/80 mt-1">Ongoing Projects</p>
                 </div>
               </div>
-              {/* Total Hackathons */}
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
-                  <Trophy className="w-6 h-6 text-amber-500" />
-                </div>
+                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0"><Trophy className="w-6 h-6 text-amber-500" /></div>
                 <div>
-                  <div className="flex items-baseline">
-                    <span className="text-3xl font-bold text-[#21493A]">[</span>
-                    <Input type="number" min="0" value={formData.execution_hacks} onChange={(e) => setFormData((prev) => ({ ...prev, execution_hacks: parseInt(e.target.value) || 0 }))} disabled={!canEditSelected} className="w-8 h-8 text-center text-xl font-bold text-[#21493A] bg-transparent border-none p-0 focus:ring-0 shadow-none mx-0.5 [&::-webkit-inner-spin-button]:appearance-none" />
-                    <span className="text-3xl font-bold text-[#21493A]">]</span>
-                    <span className="text-[10px] text-[#2A5D4B] font-medium ml-1.5 flex items-center"><Edit2 className="w-3 h-3 mr-0.5" /> Edit</span>
-                  </div>
+                  <p className="text-3xl font-bold text-[#21493A]">{formData.hackathons.split("\n").filter(l => l.trim()).length}</p>
                   <p className="text-sm font-medium text-[#2A5D4B]/80 mt-1">Total Hackathons</p>
                 </div>
               </div>
-              {/* Research Published */}
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0">
-                  <FileText className="w-6 h-6 text-blue-500" />
-                </div>
+                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0"><FileText className="w-6 h-6 text-blue-500" /></div>
                 <div>
-                  <div className="flex items-baseline">
-                    <span className="text-3xl font-bold text-[#21493A]">[</span>
-                    <Input type="number" min="0" value={formData.execution_papers} onChange={(e) => setFormData((prev) => ({ ...prev, execution_papers: parseInt(e.target.value) || 0 }))} disabled={!canEditSelected} className="w-8 h-8 text-center text-xl font-bold text-[#21493A] bg-transparent border-none p-0 focus:ring-0 shadow-none mx-0.5 [&::-webkit-inner-spin-button]:appearance-none" />
-                    <span className="text-3xl font-bold text-[#21493A]">]</span>
-                    <span className="text-[10px] text-[#2A5D4B] font-medium ml-1.5 flex items-center"><Edit2 className="w-3 h-3 mr-0.5" /> Edit</span>
-                  </div>
+                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_papers.split("\n").filter(l => l.trim()).length}</p>
                   <p className="text-sm font-medium text-[#2A5D4B]/80 mt-1">Research Published</p>
                 </div>
               </div>
