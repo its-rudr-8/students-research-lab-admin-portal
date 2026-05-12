@@ -577,8 +577,8 @@ export default function Timeline() {
                   const beigePath = "bg-[#EAD8C0]"; 
 
                   const getIcon = (category: string = "", title: string = "") => {
-                    const cat = category.toLowerCase();
-                    const t = title.toLowerCase();
+                    const cat = (category || "").toLowerCase();
+                    const t = (title || "").toLowerCase();
                     if (cat.includes('success') || t.includes('success')) return <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-white" />;
                     if (cat.includes('learning') || t.includes('debate') || cat.includes('study')) return <BookOpen className="w-8 h-8 sm:w-10 sm:h-10 text-white" />;
                     if (cat.includes('alumni') || t.includes('alumni')) return <GraduationCap className="w-8 h-8 sm:w-10 sm:h-10 text-white" />;

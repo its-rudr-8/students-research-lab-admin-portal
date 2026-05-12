@@ -485,7 +485,7 @@ export default function Publications() {
     }
     setEditFormData({
       title: publication.title || "",
-      authors: publication.authors || publication.student_authors || "",
+      authors: (Array.isArray(publication.authors) ? publication.authors.join(", ") : publication.authors) || (Array.isArray(publication.student_authors) ? publication.student_authors.join(", ") : publication.student_authors) || "",
       published_date: publication.published_date || publication.date || "",
       conference_date: publication.conference_date || "",
       type_of_publication: publication.type_of_publication || publication.event_type || "",
