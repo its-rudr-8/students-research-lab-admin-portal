@@ -59,6 +59,14 @@ export default function Scores() {
 
   const normalizeText = (value: unknown) => String(value || "").trim();
 
+  const parseList = (value: any) => {
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value?.data)) return value.data;
+    if (Array.isArray(value?.leaderboard)) return value.leaderboard;
+    if (Array.isArray(value?.data?.leaderboard)) return value.data.leaderboard;
+    return [];
+  };
+
   const monthRank = (value: string) => {
     const raw = normalizeText(value);
     const match = raw.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
@@ -70,6 +78,8 @@ export default function Scores() {
   const normalizePeriod = (period: string) => {
     const raw = normalizeText(period);
     if (/^all\s*time$/i.test(raw)) return "All Time";
+    // Check for academic year format (YYYY-YYYY)
+    if (/^\d{4}-\d{4}$/.test(raw)) return raw;
     const match = raw.match(/^([A-Za-z]+)\s+(\d{4})$/);
     if (!match) return raw;
     const monthMap: Record<string, string> = {
@@ -81,6 +91,40 @@ export default function Scores() {
     return `${monthName} ${match[2]}`;
   };
 
+  const parsePeriod = (period: string): { month: number; year: number } | null => {
+    const raw = normalizeText(period);
+    if (/^all\s*time$/i.test(raw)) return null;
+    const match = raw.match(/^([A-Za-z]{3,9})\s+(\d{4})$/);
+    if (!match) return null;
+    const monthMap: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    const month = monthMap[match[1].toLowerCase().substring(0, 3)] || 0;
+    const year = Number(match[2]);
+    return month > 0 ? { month, year } : null;
+  };
+
+  const isInAcademicYear = (period: string, acadYearStart: number): boolean => {
+    const parsed = parsePeriod(period);
+    if (!parsed) return false;
+    // Academic year: May of acadYearStart to April of (acadYearStart + 1)
+    const startMonth = 5; // May
+    const endMonth = 4; // April
+    if (parsed.year === acadYearStart && parsed.month >= startMonth) return true;
+    if (parsed.year === acadYearStart + 1 && parsed.month <= endMonth) return true;
+    return false;
+  };
+
+  const getAcademicYearFormat = (acadYearStart: number): string => {
+    return `${acadYearStart}-${acadYearStart + 1}`;
+  };
+
+  const getCurrentAcademicYear = (): number => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentYear = now.getFullYear();
+    // Academic year starts in May (month 5)
+    return currentMonth >= 5 ? currentYear : currentYear - 1;
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -90,7 +134,8 @@ export default function Scores() {
       const stats = rawStats.map((s: any) => ({ ...s, period: normalizePeriod(s.period) }));
 
       setCachedStudentsData(parseList(studentsRes));
-      const months = Array.from(new Set<string>(stats.map((r: any) => r.period).filter((p: string) => p && p !== "All Time"))).sort((a, b) => monthRank(b) - monthRank(a));
+      // Get months but exclude "All Time" and academic year format (YYYY-YYYY)
+      const months = Array.from(new Set<string>(stats.map((r: any) => r.period).filter((p: string) => p && !/^all\s*time$/i.test(p) && !/^\d{4}-\d{4}$/.test(p)))).sort((a, b) => monthRank(b) - monthRank(a));
       
       setMonthOptions(months);
       setCachedLeaderboardStats(stats);
@@ -110,7 +155,36 @@ export default function Scores() {
       const nameMap = new Map<string, any>();
       cachedStudentsData.forEach((s: any) => { const e = normalizeText(s.enrollment_no); if (e) nameMap.set(e, s); });
       const agg = new Map<string, ScoreRow>();
-      const stats = viewMode === "cumulative" ? cachedLeaderboardStats : cachedLeaderboardStats.filter(s => normalizeText(s.period) === selectedMonth);
+      
+      let stats: any[] = [];
+      if (viewMode === "cumulative") {
+        const currentAcadYear = getCurrentAcademicYear();
+        const previousAcadYear = currentAcadYear - 1;
+        const currentAcadYearStr = getAcademicYearFormat(currentAcadYear);
+        const previousAcadYearStr = getAcademicYearFormat(previousAcadYear);
+        
+        // First check for YYYY-YYYY format (e.g., "2026-2027", fallback to "2025-2026")
+        let hasCurrentYearFormat = cachedLeaderboardStats.some(s => normalizeText(s.period) === currentAcadYearStr);
+        let hasPreviousYearFormat = cachedLeaderboardStats.some(s => normalizeText(s.period) === previousAcadYearStr);
+        
+        if (hasCurrentYearFormat) {
+          stats = cachedLeaderboardStats.filter(s => normalizeText(s.period) === currentAcadYearStr);
+        } else if (hasPreviousYearFormat) {
+          stats = cachedLeaderboardStats.filter(s => normalizeText(s.period) === previousAcadYearStr);
+        } else {
+          // Fallback to month-based filtering
+          stats = cachedLeaderboardStats.filter(s => {
+            const period = normalizeText(s.period);
+            if (/^all\s*time$/i.test(period)) return false;
+            if (isInAcademicYear(period, currentAcadYear)) return true;
+            if (isInAcademicYear(period, previousAcadYear)) return true;
+            return false;
+          });
+        }
+      } else {
+        // Monthly or contributors view
+        stats = cachedLeaderboardStats.filter(s => normalizeText(s.period) === selectedMonth);
+      }
       stats.forEach((score: any) => {
         const enr = normalizeText(score.enrollment_no);
         const stu = nameMap.get(enr) || {};
