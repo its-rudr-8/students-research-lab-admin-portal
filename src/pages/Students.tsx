@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import ImageUpload from "@/components/ImageUpload";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Plus, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,27 +12,131 @@ import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 
-interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; photo_url?: string; }
+interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; profile_image?: string; }
 
 const TABS = [{ l: "All Batches", v: "" }, { l: "Batch 2024–2028", v: "2024-2028" }, { l: "Batch 2023–2027", v: "2023-2027" }, { l: "Batch 2022–2026", v: "2022-2026" }];
 const PG = 10;
 const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
 const mb = (t?: string) => { const s = (t || "").toLowerCase(); if (s.includes("head")) return { bg: "#dcf0e6", c: "#1a5c3a", b: "#a8d8bc", d: "#2e8a58" }; if (s.includes("peer")) return { bg: "#fde8f3", c: "#8f2557", b: "#f4b8d8", d: "#c94080" }; return { bg: "#f0eee8", c: "#5a5248", b: "#d8d4cc", d: "#8a8278" }; };
 const BB = { bg: "#e4f0ec", c: "#1e5c42", b: "#aad4c0" };
-const BLANK = { student_name: "", enrollment_no: "", email: "", contact_no: "", department: "", institute_name: "", semester: "", division: "", batch: "", gender: "male", member_type: "General Members" };
+const BLANK = { student_name: "", enrollment_no: "", email: "", contact_no: "", department: "", institute_name: "", semester: "", division: "", batch: "", gender: "male", member_type: "General Members", profile_image: "" };
 
-function FormFields({ data, set }: { data: typeof BLANK; set: (v: typeof BLANK) => void }) {
-  const fields: [string, string, string, string?][] = [["Student Name *", "student_name", "Full name"], ["Enrollment No *", "enrollment_no", "24BECE30001"], ["Email *", "email", "student@example.com", "email"], ["Contact", "contact_no", "+91 98765"], ["Institute", "institute_name", "KSV University"], ["Department", "department", "CE"]];
-  return (<div className="space-y-3 pt-2">
-    {fields.map(([l, k, p, t]) => (<div key={k} className="space-y-1"><Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label><Input type={t || "text"} placeholder={p} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} /></div>))}
-    <div className="grid grid-cols-3 gap-2">
-      {(["semester", "division", "batch"] as const).map(k => (<div key={k} className="space-y-1"><Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{k.charAt(0).toUpperCase() + k.slice(1)}</Label><Input placeholder={k === "semester" ? "5" : k === "division" ? "A" : "2024-2028"} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} /></div>))}
+function FormFields({
+  data,
+  set,
+  onImageUpload,
+}: {
+  data: typeof BLANK;
+  set: (v: typeof BLANK) => void;
+  onImageUpload: (url: string) => void;
+}) {
+  const fields: [string, string, string, string?][] = [
+    ["Email *", "email", "student@example.com", "email"],
+    ["Contact", "contact_no", "+91 98765"],
+    ["Institute", "institute_name", "KSV University"],
+    ["Department", "department", "CE"],
+  ];
+
+  return (
+    <div className="space-y-5 pt-2">
+      {/* Profile header: avatar left, name + enrollment right */}
+      <div className="flex flex-col sm:flex-row gap-5 items-center sm:items-start bg-[#faf8f5] p-5 rounded-2xl border border-[#e4ddd0]">
+        {/* Left – avatar uploader */}
+        <div className="flex-shrink-0 flex flex-col items-center gap-2">
+          <ImageUpload
+            currentImage={data.profile_image}
+            onImageUpload={onImageUpload}
+            label="Profile Photo"
+            maxSize={10}
+            section="student"
+            mediaType="image"
+            variant="avatar"
+          />
+          <span style={{ fontSize: "0.7rem", color: "#a89880", fontWeight: 500 }}>JPG / PNG / WEBP</span>
+        </div>
+
+        {/* Divider – vertical on desktop, hidden on mobile */}
+        <div className="hidden sm:block w-px self-stretch bg-[#e4ddd0] mx-1" />
+
+        {/* Right – identity fields */}
+        <div className="w-full flex flex-col gap-3 flex-grow justify-center">
+          <div className="space-y-1.5">
+            <Label style={{ color: "#5a4a38", fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.01em" }}>Student Name *</Label>
+            <Input
+              type="text"
+              placeholder="Full name"
+              className="rounded-xl border-[#d8d2c6] bg-white h-11 text-[#1a1810] text-sm"
+              value={data.student_name}
+              onChange={e => set({ ...data, student_name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label style={{ color: "#5a4a38", fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.01em" }}>Enrollment No *</Label>
+            <Input
+              type="text"
+              placeholder="24BECE30001"
+              className="rounded-xl border-[#d8d2c6] bg-white h-11 font-mono text-sm tracking-wide text-[#1a1810]"
+              value={data.enrollment_no}
+              onChange={e => set({ ...data, enrollment_no: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Remaining fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {fields.map(([l, k, p, t]) => (
+          <div key={k} className="space-y-1">
+            <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>
+            <Input
+              type={t || "text"}
+              placeholder={p}
+              className="rounded-xl"
+              value={(data as any)[k]}
+              onChange={e => set({ ...data, [k]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {(["semester", "division", "batch"] as const).map(k => (
+          <div key={k} className="space-y-1">
+            <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{k.charAt(0).toUpperCase() + k.slice(1)}</Label>
+            <Input
+              placeholder={k === "semester" ? "5" : k === "division" ? "A" : "2024-2028"}
+              className="rounded-xl"
+              value={(data as any)[k]}
+              onChange={e => set({ ...data, [k]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>Gender</Label>
+          <Select value={data.gender} onValueChange={v => set({ ...data, gender: v })}>
+            <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="male">Male</SelectItem>
+              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>Member Type</Label>
+          <Select value={data.member_type} onValueChange={v => set({ ...data, member_type: v })}>
+            <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="General Members">General Members</SelectItem>
+              <SelectItem value="Head-Appointed">Head-Appointed</SelectItem>
+              <SelectItem value="Peer-Nominated">Peer-Nominated</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
     </div>
-    <div className="grid grid-cols-2 gap-2">
-      <div className="space-y-1"><Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>Gender</Label><Select value={data.gender} onValueChange={v => set({ ...data, gender: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="male">Male</SelectItem><SelectItem value="female">Female</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
-      <div className="space-y-1"><Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>Member Type</Label><Select value={data.member_type} onValueChange={v => set({ ...data, member_type: v })}><SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="General Members">General Members</SelectItem><SelectItem value="Head-Appointed">Head-Appointed</SelectItem><SelectItem value="Peer-Nominated">Peer-Nominated</SelectItem></SelectContent></Select></div>
-    </div>
-  </div>);
+  );
 }
 
 export default function Students() {
@@ -61,7 +166,7 @@ export default function Students() {
   const onSearch = (v: string) => { setSearch(v); setPage(1); setSel(new Set()); };
   const toggleSel = (id: string) => { const s = new Set(sel); s.has(id) ? s.delete(id) : s.add(id); setSel(s); };
   const toggleAll = () => { if (allSel) { const s = new Set(sel); paged.forEach(st => s.delete(st.enrollment_no)); setSel(s); } else { const s = new Set(sel); paged.forEach(st => s.add(st.enrollment_no)); setSel(s); } };
-  const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "General Members" }); };
+  const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "General Members", profile_image: s.profile_image || "" }); };
 
   const handleAdd = async () => { if (!canEdit || !form.student_name || !form.enrollment_no || !form.email) { toast({ variant: "destructive", title: "Fill required fields" }); return; } try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r) { setEditSt(null); toast({ title: "Student updated" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
@@ -98,13 +203,16 @@ export default function Students() {
             <button onClick={() => setSelMode(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: "#f0ece4", color: "#3a3020", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "1.5px solid #ddd8ce" }}>Select</button>
           )}
           {canEdit && (
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <Dialog open={addOpen} onOpenChange={(o) => {
+              if (o) setForm(BLANK);
+              setAddOpen(o);
+            }}>
               <DialogTrigger asChild>
-                <button style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: GRN, color: "#fff", fontSize: "0.875rem", fontWeight: 700, cursor: "pointer", border: "none", boxShadow: "0 4px 16px rgba(26,74,52,0.34)", letterSpacing: "0.02em" }}><Plus size={16} strokeWidth={2.5} /> Add Student</button>
+                <button onClick={() => setForm(BLANK)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: GRN, color: "#fff", fontSize: "0.875rem", fontWeight: 700, cursor: "pointer", border: "none", boxShadow: "0 4px 16px rgba(26,74,52,0.34)", letterSpacing: "0.02em" }}><Plus size={16} strokeWidth={2.5} /> Add Student</button>
               </DialogTrigger>
               <DialogContent className="rounded-2xl sm:max-w-md max-h-[85vh] overflow-y-auto" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
                 <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>Add New Student</DialogTitle></DialogHeader>
-                <FormFields data={form} set={setForm} />
+                <FormFields data={form} set={setForm} onImageUpload={(url) => setForm(prev => ({ ...prev, profile_image: url }))} />
                 <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl" onClick={() => setAddOpen(false)}>Cancel</Button><Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleAdd}>Add Student</Button></div>
               </DialogContent>
             </Dialog>
@@ -116,7 +224,7 @@ export default function Students() {
       <Dialog open={!!editSt} onOpenChange={v => !v && setEditSt(null)}>
         <DialogContent className="rounded-2xl sm:max-w-md max-h-[85vh] overflow-y-auto" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
           <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>Edit Student</DialogTitle></DialogHeader>
-          <FormFields data={form} set={setForm} />
+          <FormFields data={form} set={setForm} onImageUpload={(url) => setForm(prev => ({ ...prev, profile_image: url }))} />
           <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl" onClick={() => setEditSt(null)}>Cancel</Button><Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleEdit}>Save Changes</Button></div>
         </DialogContent>
       </Dialog>
@@ -162,7 +270,7 @@ export default function Students() {
                         <td style={{ padding: "12px 16px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                             <div style={{ position: "relative", flexShrink: 0 }}>
-                              <StudentAvatar name={s.student_name || "N/A"} enrollmentNo={s.enrollment_no} photoUrl={s.photo_url} className="w-10 h-10" fallbackClassName="text-xs font-bold" style={{ "--tw-ring-color": "#b8d8c8", background: "#e0f0e8", color: "#1a5c3a" } as any} />
+                              <StudentAvatar name={s.student_name || "N/A"} enrollmentNo={s.enrollment_no} photoUrl={s.profile_image} className="w-10 h-10" fallbackClassName="text-xs font-bold" style={{ "--tw-ring-color": "#b8d8c8", background: "#e0f0e8", color: "#1a5c3a" } as any} />
                               <span style={{ position: "absolute", bottom: -1, right: -1, width: 9, height: 9, borderRadius: "50%", background: "#22c55e", border: "2px solid #fff" }} />
                             </div>
                             <div>

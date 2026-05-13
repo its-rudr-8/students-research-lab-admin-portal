@@ -41,7 +41,7 @@ const formatDateToISO = (date: any): string | null => {
 };
 
 export default function Attendance() {
-  const [students, setStudents] = useState<Array<{ enrollment_no: string; name: string; initials: string; hours: number; photo_url?: string }>>([]);
+  const [students, setStudents] = useState<Array<{ enrollment_no: string; name: string; initials: string; hours: number; profile_image?: string }>>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchName, setSearchName] = useState("");
   const itemsPerPage = 10;
@@ -102,7 +102,7 @@ export default function Attendance() {
       const attData = cachedAttendanceData.filter((row: any) => row.period === attendanceDate);
       const stuData = cachedStudentsData;
 
-      const stuMap: { [enrollment_no: string]: { name: string; initials: string; photo_url?: string } } = {};
+      const stuMap: { [enrollment_no: string]: { name: string; initials: string; profile_image?: string } } = {};
       stuData
         .filter((student: any) => String(student.member_type || "member").toLowerCase() !== "admin")
         .forEach((s: any) => {
@@ -117,7 +117,7 @@ export default function Attendance() {
               .map((n: string) => n[0])
               .join("")
               .toUpperCase(),
-            photo_url: undefined,
+            profile_image: undefined,
           };
         });
 
@@ -129,7 +129,7 @@ export default function Attendance() {
             enrollment_no: row.enrollment_no,
             name: details ? details.name : row.enrollment_no,
             initials: details ? details.initials : row.enrollment_no.slice(0, 2).toUpperCase(),
-            photo_url: details?.photo_url,
+            profile_image: details?.profile_image,
             hours: row.hours,
           };
         });
@@ -369,7 +369,7 @@ export default function Attendance() {
                               <StudentAvatar
                                 name={student.name}
                                 enrollmentNo={student.enrollment_no}
-                                photoUrl={student.photo_url}
+                                photoUrl={student.profile_image}
                                 className="w-7 h-7"
                                 fallbackClassName="bg-[#EAD8C0]/30 text-[#8B735B] text-[10px] font-medium"
                               />

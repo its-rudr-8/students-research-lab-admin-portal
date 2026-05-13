@@ -15,6 +15,7 @@ import Timeline from "@/pages/Timeline";
 import Achievements from "@/pages/Achievements";
 import JoinRequests from "@/pages/JoinRequests";
 import MemberCV from "./pages/MemberCV";
+import SRLSessions from "./pages/SRLSessions";
 import Login from "@/pages/Login";
 import GoogleSheetData from "@/pages/GoogleSheetData";
 import SheetSync from "@/pages/SheetSync";
@@ -150,6 +151,14 @@ const App = () => {
                   element={
                     <AdminOnlyRoute>
                       <Achievements />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="/sessions"
+                  element={
+                    <AdminOnlyRoute>
+                      <SRLSessions />
                     </AdminOnlyRoute>
                   }
                 />

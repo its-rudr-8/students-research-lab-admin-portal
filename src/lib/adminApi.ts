@@ -144,7 +144,7 @@ export const adminAPI = {
       s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
     leaderboard.forEach((r: any) => {
-      const url = r.photo || r.image || r.photo_url || r.photoUrl || r.profile_image || r.avatar || r.picture;
+      const url = r.profile_image || r.photo_url || r.photo || r.image || r.photoUrl || r.avatar || r.picture;
       if (!url) return;
       if (r.enrollment_no) imageByEnrollment.set(String(r.enrollment_no).toUpperCase(), url);
       const name = r.student_name || r.name;
@@ -152,7 +152,7 @@ export const adminAPI = {
     });
 
     const resolvePhoto = (s: any): string => {
-      const direct = s.photo_url || s.image || s.photo || s.photoUrl || s.profile_image || s.avatar;
+      const direct = s.profile_image || s.photo_url || s.image || s.photo || s.photoUrl || s.avatar;
       if (direct) return direct;
       const byEnrollment = imageByEnrollment.get(String(s.enrollment_no || "").toUpperCase());
       if (byEnrollment) return byEnrollment;
@@ -165,9 +165,9 @@ export const adminAPI = {
     };
 
     if (res && Array.isArray(res.data)) {
-      res.data = res.data.map((s: any) => ({ ...s, photo_url: resolvePhoto(s) }));
+      res.data = res.data.map((s: any) => ({ ...s, profile_image: resolvePhoto(s) }));
     } else if (Array.isArray(res)) {
-      return res.map((s: any) => ({ ...s, photo_url: resolvePhoto(s) }));
+      return res.map((s: any) => ({ ...s, profile_image: resolvePhoto(s) }));
     }
     return res;
   },
@@ -389,7 +389,64 @@ export const adminAPI = {
     return apiCall(`/admin/achievements/${id}`, "DELETE");
   },
 
-  // Image Upload API
+  // SRL Sessions
+  async getSessions() {
+    return apiCall("/admin/sessions");
+  },
+  async createSession(data: any) {
+    return apiCall("/admin/sessions", "POST", data);
+  },
+  async updateSession(id: string, data: any) {
+    return apiCall(`/admin/sessions/${id}`, "PUT", data);
+  },
+  async deleteSession(id: string) {
+    return apiCall(`/admin/sessions/${id}`, "DELETE");
+  },
+
+  async uploadMedia(formData: FormData) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      "ngrok-skip-browser-warning": "true",
+    };
+
+    // Always send the real token when available; also send dev bypass header in dev mode
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    if (import.meta.env.DEV) {
+      headers["x-dev-token"] = "dev-bypass";
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/admin/upload`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    } catch (networkError: any) {
+      throw new Error("Network error: unable to reach the server. Please check your connection.");
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg = errorData.message || errorData.detail || `Upload failed (${response.status}: ${response.statusText})`;
+
+      // Only force logout for 401 on non-upload endpoints to avoid disrupting the session
+      // For upload failures, just surface the error message to the user
+      if (response.status === 401 && !token) {
+        // Only redirect if there was no token at all (genuinely unauthenticated)
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("You are not logged in. Please log in again.");
+      }
+
+      throw new Error(msg);
+    }
+
+    return response.json();
+  },
+
   async uploadImage(formData: FormData) {
     try {
       const token = getAuthToken();

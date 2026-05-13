@@ -381,6 +381,9 @@ export default function Timeline() {
                   label="Timeline Media"
                   onImageUpload={(url) => setFormData({ ...formData, image_url: url })}
                   currentImage={formData.image_url}
+                  section="timeline"
+                  mediaType="both"
+                  maxSize={50}
                 />
                 <div className="space-y-1.5">
                   <Label className="text-[#8B735B] font-semibold">LinkedIn URL</Label>
@@ -514,6 +517,9 @@ export default function Timeline() {
                 label="Timeline Media"
                 onImageUpload={(url) => setEditFormData({ ...editFormData, image_url: url })}
                 currentImage={editFormData.image_url}
+                section="timeline"
+                mediaType="both"
+                maxSize={50}
               />
               <div className="space-y-1.5">
                 <Label className="text-[#8B735B] font-semibold">LinkedIn URL</Label>
