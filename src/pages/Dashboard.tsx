@@ -62,29 +62,80 @@ function Dashboard() {
   const [researchCount, setResearchCount] = useState(0);
   const [recentAchievements, setRecentAchievements] = useState<any[]>([]);
 
+  const academicYearStartForDate = (date: Date) => {
+    const month = date.getMonth() + 1;
+    const year = date.getFullYear();
+    return month >= 5 ? year : year - 1;
+  };
+
+  const academicYearMonths = (startYear: number) => [
+    `May ${startYear}`,
+    `Jun ${startYear}`,
+    `Jul ${startYear}`,
+    `Aug ${startYear}`,
+    `Sep ${startYear}`,
+    `Oct ${startYear}`,
+    `Nov ${startYear}`,
+    `Dec ${startYear}`,
+    `Jan ${startYear + 1}`,
+    `Feb ${startYear + 1}`,
+    `Mar ${startYear + 1}`,
+    `Apr ${startYear + 1}`,
+  ];
+
+  const groupRowsByStudent = (rows: any[]) => {
+    const map = new Map<string, any>();
+    rows.forEach((row) => {
+      const enrollmentNo = String(row.enrollment_no || "").trim().toUpperCase();
+      const key = enrollmentNo || String(row.student_name || row.name || "").trim().toLowerCase();
+      const score = Number(row.debate_score || row.points || row.total_score || 0);
+      const hours = Number(row.hours || row.total_hours || 0);
+      const attendance = Number(row.attendance || 0);
+
+      if (!map.has(key)) {
+        map.set(key, {
+          ...row,
+          enrollment_no: enrollmentNo,
+          student_name: row.student_name || row.name || enrollmentNo,
+          score,
+          hours,
+          attendance,
+        });
+        return;
+      }
+
+      const existing = map.get(key);
+      existing.score += score;
+      existing.hours += hours;
+      existing.attendance += attendance;
+    });
+    return Array.from(map.values());
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const currentMonthIdx = MONTHS.indexOf(selectedMonth);
         const apiMonth = currentMonthIdx + 1;
+        const now = new Date();
+        const currentAcademicYearStart = academicYearStartForDate(now);
+        const currentAcademicYear = `${currentAcademicYearStart}-${currentAcademicYearStart + 1}`;
+        const previousAcademicYear = `${currentAcademicYearStart - 1}-${currentAcademicYearStart}`;
 
         const [
           studentsResponse, 
           activitiesResponse, 
           leaderboardResponse,
-          monthlyResponse,
-          researchResponse,
-          achievementsResponse
+          monthlyResponse
         ] = await Promise.all([
           adminAPI.getStudents().catch(() => ({ success: false, data: [] })),
           adminAPI.getActivities().catch(() => ({ success: false, data: [] })),
           adminAPI.getLeaderboard().catch(() => ({ leaderboard: [] })),
-          adminAPI.getMonthlyLeaderboard(apiMonth, selectedYear).catch(() => ({ leaderboard: [] })),
-          Promise.resolve({ success: false, data: [] }), // Research projects module was removed
-          adminAPI.getAchievements().catch(() => ({ success: false, data: [] }))
+          adminAPI.getMonthlyLeaderboard(apiMonth, selectedYear).catch(() => ({ leaderboard: [] }))
         ]);
 
         let nameMap: Record<string, string> = {};
+        let photoMap: Record<string, string> = {};
         
         const studentList = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.data;
         if (Array.isArray(studentList)) {
@@ -94,7 +145,10 @@ function Dashboard() {
           setTotalStudents(visibleStudents.length);
           visibleStudents.forEach((student: any) => {
             const en = String(student.enrollment_no || "").trim();
-            if (en) nameMap[en] = String(student.student_name || "").trim();
+            if (en) {
+              nameMap[en] = String(student.student_name || "").trim();
+              photoMap[en] = student.photo || student.photo_url || student.photoUrl || student.image || "";
+            }
           });
         }
         
@@ -104,33 +158,13 @@ function Dashboard() {
         // Research count logic was previously tied to a removed module
         // We will now derive it from the leaderboard data below for better consistency
 
-        const achieveList = Array.isArray(achievementsResponse) ? achievementsResponse : achievementsResponse?.data;
-        if (Array.isArray(achieveList)) setRecentAchievements(achieveList.slice(0, 3));
-
-        const formatName = (fullName: string) => fullName; // Preserve full name
-        const isValidMember = (s: any) => String(s.role || s.member_type || "member").toLowerCase() !== "admin";
-
-        const rawCumulative = leaderboardResponse?.leaderboard || (Array.isArray(leaderboardResponse) ? leaderboardResponse : []);
-        if (Array.isArray(rawCumulative)) {
-          const map = new Map();
-          rawCumulative.forEach(s => {
-            const id = s.enrollment_no || s.student_name || s.name;
-            const score = Number(s.debate_score || s.points || s.total_score || 0);
-            if (!map.has(id)) map.set(id, { ...s, score });
-            else map.get(id).score += score;
-          });
-          const aggregatedCumulative = Array.from(map.values()).sort((a, b) => b.score - a.score);
-          const filteredCumulative = aggregatedCumulative.filter(isValidMember);
-          
-          // Update total researchers count from the active leaderboard participants
-          setResearchCount(filteredCumulative.length);
-
-          const formattedCumulative = filteredCumulative.slice(0, 5).map((s: any) => {
-            const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
-            return { name: formatName(fullName), score: Math.round(s.score), originalName: fullName, image: s.image || s.photo_url || s.photoUrl || s.photo };
-          });
-          setCumulativeData(formattedCumulative);
-        }
+        const formatName = (fullName: string) => fullName.split(" ").slice(0, 2).join(" ");
+        const isValidMember = (s: any) => {
+          const role = String(s.role || s.member_type || "member").toLowerCase();
+          const enrollmentNo = String(s.enrollment_no || "").trim();
+          const excludedEnrollments = ["22BECE30091", "22BEIT30123"];
+          return role !== "admin" && !excludedEnrollments.includes(enrollmentNo);
+        };
 
         const rawMonthly = monthlyResponse?.leaderboard || (Array.isArray(monthlyResponse) ? monthlyResponse : []);
         const monthlyList = Array.isArray(rawMonthly) ? (() => {
@@ -154,14 +188,14 @@ function Dashboard() {
             .filter(isValidMember)
             .sort((a, b) => b.score - a.score)
             .slice(0, 5)
-            .map((s: any, idx: number) => {
+            .map((s: any) => {
               const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
+              const enrollmentNo = String(s.enrollment_no || "").trim();
               return { 
                 name: formatName(fullName), 
                 score: Math.round(s.score), 
                 originalName: fullName, 
-                image: s.image || s.photo_url || s.photoUrl || s.photo,
-                rank: idx + 1
+                image: s.image || s.photo_url || s.photoUrl || s.photo || photoMap[enrollmentNo] || ""
               };
             });
           if (formattedMonthly.length > 0) {
@@ -207,7 +241,15 @@ function Dashboard() {
             .slice(0, 5)
             .map((s: any, index: number) => {
               const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
-              return { name: formatName(fullName), hours: s.hours || 0, fill: ["#0f766e", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4"][index] || "#ccfbf1", originalName: fullName, image: s.image || s.photo_url || s.photoUrl || s.photo };
+              const enrollmentNo = String(s.enrollment_no || "").trim();
+              const fills = ["#0f766e", "#14b8a6", "#2dd4bf", "#5eead4", "#99f6e4"];
+              return { 
+                name: formatName(fullName), 
+                hours: parseFloat(s.hours || s.total_hours || "0") || 0, 
+                fill: fills[index] || "#ccfbf1", 
+                originalName: fullName,
+                image: s.image || s.photo_url || s.photoUrl || s.photo || photoMap[enrollmentNo] || ""
+              };
             });
           if (formattedHours.length > 0) {
             setTimeDedication(formattedHours);
