@@ -166,6 +166,32 @@ function Dashboard() {
           return role !== "admin" && !excludedEnrollments.includes(enrollmentNo);
         };
 
+        // --- Process Cumulative Leaderboard (Top 5 Researchers) ---
+        const rawCumulative = leaderboardResponse?.leaderboard || (Array.isArray(leaderboardResponse) ? leaderboardResponse : []);
+        if (Array.isArray(rawCumulative) && rawCumulative.length > 0) {
+          const formattedCumulative = rawCumulative
+            .filter(isValidMember)
+            .slice(0, 5)
+            .map((s: any) => {
+              const fullName = s.student_name || s.name || nameMap[s.enrollment_no] || s.enrollment_no;
+              const enrollmentNo = String(s.enrollment_no || "").trim();
+              return {
+                name: formatName(fullName),
+                score: Math.round(Number(s.total_score || s.debate_score || s.points || 0)),
+                originalName: fullName,
+                image: s.image || s.photo_url || s.photoUrl || s.photo || photoMap[enrollmentNo] || ""
+              };
+            });
+          if (formattedCumulative.length > 0) {
+            setCumulativeData(formattedCumulative);
+            setResearchCount(rawCumulative.filter(isValidMember).length);
+          } else {
+            setCumulativeData([]);
+          }
+        } else {
+          setCumulativeData([]);
+        }
+
         const rawMonthly = monthlyResponse?.leaderboard || (Array.isArray(monthlyResponse) ? monthlyResponse : []);
         const monthlyList = Array.isArray(rawMonthly) ? (() => {
           const map = new Map();
