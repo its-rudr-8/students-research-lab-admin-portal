@@ -5,6 +5,13 @@ import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -16,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ScoreRow {
   id: string;
@@ -23,7 +31,7 @@ interface ScoreRow {
   points: number;
   name: string;
   initials: string;
-  photo_url?: string;
+  profile_image?: string;
   hours?: number;
   batch?: string;
   department?: string;
@@ -56,6 +64,14 @@ export default function Scores() {
     enrollment_no: "",
     period: ""
   });
+  
+  // Bulk Add States
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addPeriod, setAddPeriod] = useState("");
+  const [addScores, setAddScores] = useState<{ [enrollment_no: string]: { points: string; hours: string } }>({});
+  const [searchName, setSearchName] = useState("");
+  const [addError, setAddError] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const normalizeText = (value: unknown) => String(value || "").trim();
 
@@ -196,7 +212,7 @@ export default function Scores() {
             points: Number(score.debate_score || score.points || score.total_score || score.monthly_score || 0), 
             name, 
             initials: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2), 
-            photo_url: stu.photo_url || score.image || score.photo, 
+            profile_image: stu.profile_image || stu.photo_url || score.profile_image || score.image || score.photo, 
             hours: Number(score.hours || score.total_hours || score.monthly_hours || 0),
             batch: stu.batch,
             department: stu.department
@@ -249,16 +265,59 @@ export default function Scores() {
   };
 
   const handleAdd = async () => {
-    setIsSaving(true);
+    setAdding(true);
+    setAddError("");
+    
+    if (!addPeriod) {
+      setAddError("Please select a period.");
+      setAdding(false);
+      return;
+    }
+    
+    // Prepare rows for students with entered scores
+    const rows = Object.entries(addScores)
+      .filter(([_, data]) => (data.points !== "" && !isNaN(Number(data.points))) || (data.hours !== "" && !isNaN(Number(data.hours))))
+      .map(([enrollment_no, data]) => ({
+        enrollment_no,
+        points: data.points !== "" ? parseFloat(data.points) : 0,
+        hours: data.hours !== "" ? parseFloat(data.hours) : 0,
+        period: addPeriod
+      }));
+    
+    if (rows.length === 0) {
+      setAddError("Please enter points or hours for at least one student.");
+      setAdding(false);
+      return;
+    }
+    
     try {
-      const res = await adminAPI.createScore({ enrollment_no: formData.enrollment_no, points: formData.points, hours: formData.hours, period: formData.period || selectedMonth });
-      if (res) {
-        toast({ title: "Added" });
-        setIsAddModalOpen(false);
-        loadData();
+      // Insert score records
+      for (const row of rows) {
+        await adminAPI.createScore(row);
       }
-    } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); }
-    finally { setIsSaving(false); }
+      
+      toast({ title: "Scores added successfully" });
+      setShowAddForm(false);
+      setAddScores({});
+      setAddPeriod(selectedMonth || "");
+      setSearchName("");
+      loadData();
+    } catch (e: any) {
+      setAddError(e.message || "Failed to add scores");
+    }
+    setAdding(false);
+  };
+  
+  const handleAddClick = () => {
+    if (showAddForm) {
+      setShowAddForm(false);
+    } else {
+      setShowAddForm(true);
+      setAddPeriod(selectedMonth || monthOptions[0] || "");
+      setAddScores({});
+      setSearchName("");
+      setAddError("");
+    }
   };
 
   return (
@@ -304,10 +363,10 @@ export default function Scores() {
 
           {hasWriteAccess() && (
             <button
-              onClick={() => { setFormData({ points: 0, hours: 0, enrollment_no: "", period: selectedMonth || "" }); setIsAddModalOpen(true); }}
+              onClick={handleAddClick}
               style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: GRN, color: "#fff", fontSize: "0.875rem", fontWeight: 700, cursor: "pointer", border: "none", boxShadow: "0 4px 16px rgba(26,74,52,0.34)", letterSpacing: "0.02em" }}
             >
-              <Plus size={16} strokeWidth={2.5} /> Add Score
+              <Plus size={16} strokeWidth={2.5} /> {showAddForm ? "Hide Form" : "Add Score"}
             </button>
           )}
         </div>
@@ -363,7 +422,7 @@ export default function Scores() {
 
                           <td style={{ padding: "12px 16px" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <StudentAvatar name={s.name} enrollmentNo={s.enrollment_no} photoUrl={s.photo_url} className="w-10 h-10" />
+                              <StudentAvatar name={s.name} enrollmentNo={s.enrollment_no} photoUrl={s.profile_image} className="w-10 h-10" />
                               <div>
                                 <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#18180e", lineHeight: 1.3, margin: 0 }}>{s.name}</p>
                                 <p style={{ fontSize: "0.72rem", color: "#b0a898", lineHeight: 1.3, margin: 0 }}>{s.enrollment_no}</p>
@@ -426,13 +485,95 @@ export default function Scores() {
         )}
       </div>
 
+      {/* Bulk Add Scores Form */}
+      {showAddForm && (
+        <motion.form onSubmit={(e) => { e.preventDefault(); handleAdd(); }} initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-4 sm:p-6 border-2 border-[#EAD8C0]/50 rounded-2xl bg-gradient-to-br from-[#FAF7F2]/30 to-stone-50/20 flex flex-col gap-4 max-w-6xl mx-auto w-full glass-card">
+          <div className="flex flex-col md:flex-row gap-4 md:items-center">
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
+              <label className="font-semibold text-sm text-stone-700 shrink-0">Period:</label>
+              <Select value={addPeriod} onValueChange={setAddPeriod}>
+                <SelectTrigger className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium">
+                  <SelectValue placeholder="Select Period" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
+                  {monthOptions.map(m => (
+                    <SelectItem key={m} value={m} className="font-medium">{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
+              <label className="font-semibold text-sm text-stone-700 shrink-0">Search Name:</label>
+              <input
+                type="text"
+                placeholder="Search by student name..."
+                value={searchName}
+                onChange={e => setSearchName(e.target.value)}
+                className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
+              />
+            </div>
+          </div>
+          <div className="overflow-x-auto max-h-96 -mx-4 sm:-mx-6 px-4 sm:px-6">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30 border-b-2 border-[#EAD8C0]/50">
+                  <th className="text-left px-4 py-3 text-[#8B735B] font-bold">Student</th>
+                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Enrollment No.</th>
+                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Points</th>
+                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cachedStudentsData.filter((s: any) => s.student_name?.toLowerCase().includes(searchName.toLowerCase())).map((student: any, idx: number) => (
+                  <tr key={student.enrollment_no} className={`border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}>
+                    <td className="px-4 py-3 text-stone-700 font-medium">{student.student_name}</td>
+                    <td className="px-4 py-3 text-center text-stone-600 font-mono text-xs">{student.enrollment_no}</td>
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={addScores[student.enrollment_no]?.points || ""}
+                        onChange={e => setAddScores({ ...addScores, [student.enrollment_no]: { ...addScores[student.enrollment_no], points: e.target.value } })}
+                        className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-24 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={addScores[student.enrollment_no]?.hours || ""}
+                        onChange={e => setAddScores({ ...addScores, [student.enrollment_no]: { ...addScores[student.enrollment_no], hours: e.target.value } })}
+                        className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-24 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
+                        placeholder="0.0"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {addError && <div className="text-red-700 text-sm mt-2 p-2 bg-red-50 rounded-md border border-red-300">{addError}</div>}
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" disabled={adding} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-2 rounded-lg transition-colors flex-1">
+              {adding ? "Adding..." : "Submit Scores"}
+            </Button>
+            <Button type="button" onClick={() => setShowAddForm(false)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 font-semibold py-2 rounded-lg transition-colors">
+              Close
+            </Button>
+          </div>
+        </motion.form>
+      )}
+
       {/* Modals */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="rounded-2xl sm:max-w-md" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
           <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>Edit Score Record</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, background: "#f8f6f1", borderRadius: 12, border: "1px solid #ede8e0" }}>
-              <StudentAvatar name={editingScore?.name || ""} photoUrl={editingScore?.photo_url} className="w-12 h-12" />
+              <StudentAvatar name={editingScore?.name || ""} photoUrl={editingScore?.profile_image} className="w-12 h-12" />
               <div>
                 <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#18180e", margin: 0 }}>{editingScore?.name}</p>
                 <p style={{ fontSize: "0.75rem", color: "#8a7e72", margin: 0 }}>{editingScore?.enrollment_no}</p>
@@ -451,20 +592,6 @@ export default function Scores() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className="rounded-2xl sm:max-w-md" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
-          <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>New Score Entry</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Enrollment ID</Label><Input placeholder="24BECE30001" value={formData.enrollment_no} onChange={e => setFormData({ ...formData, enrollment_no: e.target.value })} className="rounded-xl" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Points</Label><Input type="number" value={formData.points} onChange={e => setFormData({ ...formData, points: Number(e.target.value) })} className="rounded-xl" /></div>
-              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Hours</Label><Input type="number" value={formData.hours} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="rounded-xl" /></div>
-            </div>
-            <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Period (Optional)</Label><Input placeholder={selectedMonth || "May 2026"} value={formData.period} onChange={e => setFormData({ ...formData, period: e.target.value })} className="rounded-xl" /></div>
-            <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl" onClick={() => setIsAddModalOpen(false)}>Cancel</Button><Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleAdd} disabled={isSaving}>{isSaving ? "Adding..." : "Add Entry"}</Button></div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

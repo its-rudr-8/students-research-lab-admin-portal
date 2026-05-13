@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
+import ImageUpload from "@/components/ImageUpload";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { getStoredUser } from "@/lib/auth";
 
@@ -17,7 +18,7 @@ type MemberRecord = {
   email?: string;
   department?: string;
   member_type?: string;
-  photo_url?: string;
+  profile_image?: string;
   // Mock properties for UI demonstration
   cv_completion?: number;
   hacks?: number;
@@ -38,6 +39,7 @@ type CVFormData = {
   institute: string;
   organization: string;
   reflection: string;
+  profile_image: string;
   // array fields (one item per line in textarea)
   research_areas: string;
   research_work: string;
@@ -58,6 +60,7 @@ const emptyFormData = (): CVFormData => ({
   institute: "",
   organization: "",
   reflection: "",
+  profile_image: "",
   research_areas: "",
   research_work: "",
   hackathons: "",
@@ -233,6 +236,7 @@ export default function MemberCV() {
           institute: String(d.institute || ""),
           organization: String(d.organization || ""),
           reflection: String(d.reflection || ""),
+          profile_image: String(d.profile_image || d.photo_url || ""),
           research_areas: arrToText(d.research_areas),
           research_work: arrToText(d.research_work),
           hackathons: arrToText(d.hackathons),
@@ -289,6 +293,7 @@ export default function MemberCV() {
         institute: formData.institute,
         organization: formData.organization,
         reflection: formData.reflection,
+        profile_image: formData.profile_image,
         research_areas: textToArr(formData.research_areas),
         research_work: textToArr(formData.research_work),
         hackathons: textToArr(formData.hackathons),
@@ -402,7 +407,7 @@ export default function MemberCV() {
                             <div className="relative overflow-hidden rounded-[20px] bg-white border transition-all duration-300 border-[#D4C9B6] shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-primary/40">
                               <div className="h-16 bg-gradient-to-r from-[#EAE1D2] to-[#D4C9B6]/30 w-full absolute top-0 left-0" />
                               <div className="p-5 pt-8 relative z-0 flex flex-col items-center">
-                                <StudentAvatar name={member.student_name} photoUrl={member.photo_url} enrollmentNo={member.enrollment_no} className="w-20 h-20 border-4 border-white shadow-sm mb-3" />
+                                <StudentAvatar name={member.student_name} photoUrl={member.profile_image} enrollmentNo={member.enrollment_no} className="w-20 h-20 border-4 border-white shadow-sm mb-3" />
                                 <h3 className="font-bold text-[#1a1810] text-center line-clamp-1">{member.student_name}</h3>
                                 <p className="text-xs text-muted-foreground font-mono mt-0.5">{member.enrollment_no}</p>
                                 <div className="grid grid-cols-3 w-full gap-1 sm:gap-2 mt-4 sm:mt-5 py-3 border-y border-dashed border-[#D4C9B6]">
@@ -456,6 +461,32 @@ export default function MemberCV() {
         <div className="space-y-6 pb-24">
           {/* Main Form Card */}
           <div className="bg-[#F3F0E8] rounded-[24px] p-6 sm:p-10 border border-[#D4C9B6] shadow-sm space-y-8">
+
+            {/* Profile Header Card */}
+            <div className="flex flex-col sm:flex-row gap-6 items-start bg-[#faf8f5] p-5 sm:p-6 rounded-2xl border border-[#D4C9B6]">
+              <div className="w-full sm:w-auto flex flex-col items-center justify-center flex-shrink-0">
+                <ImageUpload
+                  currentImage={formData.profile_image}
+                  onImageUpload={(url) => setFormData(p => ({ ...p, profile_image: url }))}
+                  label="Profile Photo"
+                  maxSize={10}
+                  section="student"
+                  mediaType="image"
+                  variant="avatar"
+                />
+              </div>
+              
+              <div className="w-full space-y-4 flex-grow pt-1">
+                <div className="space-y-1.5">
+                  <Label style={{ color: "#1a1810", fontSize: "0.85rem", fontWeight: 700 }}>Student Name *</Label>
+                  <Input type="text" placeholder="Full name" className="rounded-xl border-[#D4C9B6] bg-white h-11 text-[#1a1810]" value={formData.student_name || (selectedMember?.student_name || "")} onChange={e => setFormData(p => ({ ...p, student_name: e.target.value }))} disabled={!canEditSelected} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label style={{ color: "#1a1810", fontSize: "0.85rem", fontWeight: 700 }}>Enrollment No *</Label>
+                  <Input type="text" className="rounded-xl border-[#D4C9B6] bg-slate-50 h-11 font-mono text-sm text-[#1a1810] cursor-not-allowed opacity-80" value={selectedEnrollment} disabled={true} />
+                </div>
+              </div>
+            </div>
 
             {/* Identity row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

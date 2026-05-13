@@ -21,6 +21,7 @@ import {
   Milestone,
   ShieldCheck,
   Award,
+  Presentation,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,6 +40,7 @@ const allNavItems = [
   { title: "Activities", path: "/activities", icon: Calendar, requiresAdmin: true },
   { title: "Timeline", path: "/timeline", icon: Milestone, requiresAdmin: true },
   { title: "Achievements", path: "/achievements", icon: Award, requiresAdmin: true },
+  { title: "SRL Sessions", path: "/sessions", icon: Presentation, requiresAdmin: true },
   { title: "Member CV", path: "/member-cv", icon: FileUser, requiresAdmin: false },
   { title: "Join Requests", path: "/join-requests", icon: ShieldCheck, requiresAdmin: true },
 ];
@@ -52,6 +54,7 @@ const pageNames: Record<string, string> = {
   "/activities": "Activities & Events",
   "/timeline": "Journey Timeline",
   "/achievements": "Achievements",
+  "/sessions": "SRL Sessions",
   "/member-cv": "Member CV Profiles",
   "/sheet-sync": "Sync Google Sheets",
   "/google-sheets": "Google Sheets Data",

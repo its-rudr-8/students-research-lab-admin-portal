@@ -21,6 +21,7 @@ interface Achievement {
   category?: string;
   linkedin_url?: string;
   image_url?: string;
+  media_urls?: string[];
   created_at?: string;
 }
 
@@ -32,6 +33,8 @@ export default function Achievements() {
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // image_url is used as the working image field in both forms;
+  // on submit it is mapped to media_urls for the backend
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -89,6 +92,9 @@ export default function Achievements() {
 
     try {
       setSubmitting(true);
+      // Build media_urls from the uploaded image URL
+      const mediaUrlsForCreate = formData.image_url.trim() ? [formData.image_url.trim()] : [];
+      console.log("[Achievements] CREATE payload image_url:", formData.image_url, "| media_urls:", mediaUrlsForCreate);
       const response = await adminAPI.createAchievement({
         title: formData.title.trim(),
         description: formData.description.trim() || null,
@@ -96,6 +102,7 @@ export default function Achievements() {
         category: formData.category.trim() || null,
         linkedin_url: formData.linkedin_url.trim() || null,
         image_url: formData.image_url.trim() || null,
+        media_urls: mediaUrlsForCreate,
       });
 
       if (response) {
@@ -141,13 +148,23 @@ export default function Achievements() {
 
   const handleStartEdit = (achievement: Achievement) => {
     setEditingAchievement(achievement);
+    // Prefer media_urls[0] as the current image (canonical DB field),
+    // fall back to image_url for legacy records
+    const currentImage =
+      (achievement.media_urls && achievement.media_urls.length > 0
+        ? achievement.media_urls[0]
+        : null) ||
+      achievement.image_url ||
+      "";
     setEditFormData({
       title: achievement.title || "",
       description: achievement.description || "",
-      achievement_date: achievement.achievement_date || "",
+      achievement_date: achievement.achievement_date
+        ? achievement.achievement_date.split("T")[0]
+        : "",
       category: achievement.category || "",
       linkedin_url: achievement.linkedin_url || "",
-      image_url: achievement.image_url || "",
+      image_url: currentImage,
     });
     setEditOpen(true);
   };
@@ -157,6 +174,9 @@ export default function Achievements() {
 
     try {
       setEditSubmitting(true);
+      // Build media_urls from the uploaded/existing image URL
+      const mediaUrlsForUpdate = editFormData.image_url.trim() ? [editFormData.image_url.trim()] : [];
+      console.log("[Achievements] UPDATE payload image_url:", editFormData.image_url, "| media_urls:", mediaUrlsForUpdate);
       const response = await adminAPI.updateAchievement(String(editingAchievement.id), {
         title: editFormData.title.trim(),
         description: editFormData.description.trim() || null,
@@ -164,6 +184,8 @@ export default function Achievements() {
         category: editFormData.category.trim() || null,
         linkedin_url: editFormData.linkedin_url.trim() || null,
         image_url: editFormData.image_url.trim() || null,
+        // Always send media_urls so the backend persists the image correctly
+        media_urls: mediaUrlsForUpdate,
       });
 
       if (response) {
@@ -245,7 +267,7 @@ export default function Achievements() {
                           <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.achievement_date} onChange={(e) => setFormData({ ...formData, achievement_date: e.target.value })} />
                         </div>
                       </div>
-                      <ImageUpload label="Achievement Photo" onImageUpload={(url) => setFormData({ ...formData, image_url: url })} currentImage={formData.image_url} />
+                      <ImageUpload label="Achievement Media" onImageUpload={(url) => setFormData(prev => ({ ...prev, image_url: url }))} currentImage={formData.image_url} section="achievement" mediaType="both" maxSize={50} />
                       <div className="space-y-1.5">
                         <Label className="text-[#8B735B] font-bold">Description</Label>
                         <Textarea placeholder="Details..." className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white" rows={3} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
@@ -297,9 +319,9 @@ export default function Achievements() {
                         {i < achievements.length - 1 && (
                           <div className="absolute bottom-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-[#EAD8C0]/60 to-transparent" />
                         )}
-                        {achievement.image_url && !achievement.title.includes("8 Teams") && (
+                        {((achievement.media_urls && achievement.media_urls.length > 0) || achievement.image_url) && !achievement.title.includes("8 Teams") && (
                           <div className="w-full sm:w-24 h-24 rounded-xl overflow-hidden shadow-md border-2 border-white shrink-0">
-                            <img src={achievement.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <img src={(achievement.media_urls && achievement.media_urls.length > 0) ? achievement.media_urls[0] : achievement.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                           </div>
                         )}
                         <div className="flex-1 space-y-2">
@@ -390,7 +412,7 @@ export default function Achievements() {
                   <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.achievement_date} onChange={(e) => setEditFormData({ ...editFormData, achievement_date: e.target.value })} />
                 </div>
               </div>
-              <ImageUpload label="Achievement Photo" onImageUpload={(url) => setEditFormData({ ...editFormData, image_url: url })} currentImage={editFormData.image_url} />
+              <ImageUpload label="Achievement Media" onImageUpload={(url) => setEditFormData(prev => ({ ...prev, image_url: url }))} currentImage={editFormData.image_url} section="achievement" mediaType="both" maxSize={50} />
               <div className="space-y-1.5">
                 <Label className="text-[#8B735B] font-bold">Description</Label>
                 <Textarea placeholder="Details..." className="rounded-xl resize-none border-[#EAD8C0]/40 bg-white" rows={3} value={editFormData.description} onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })} />

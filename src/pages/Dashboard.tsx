@@ -60,6 +60,7 @@ function Dashboard() {
   const [timeDedication, setTimeDedication] = useState<any[]>([]);
   const [prevHoursDedicated, setPrevHoursDedicated] = useState(0);
   const [researchCount, setResearchCount] = useState(0);
+  const [publicationCount, setPublicationCount] = useState(0);
   const [recentAchievements, setRecentAchievements] = useState<any[]>([]);
 
   const academicYearStartForDate = (date: Date) => {
@@ -296,6 +297,48 @@ function Dashboard() {
     fetchData();
   }, [selectedMonth, selectedYear]);
 
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchImpactCounts = async () => {
+      try {
+        const [publicationRes, memberCvData] = await Promise.all([
+          adminAPI.getPublications().catch(() => null),
+          adminAPI.getAllMemberCVs().catch(() => []),
+        ]);
+
+        const publications = Array.isArray(publicationRes)
+          ? publicationRes
+          : Array.isArray(publicationRes?.data)
+          ? publicationRes.data
+          : [];
+
+        const publicationCount = publications.length;
+        const memberCvProfiles = Array.isArray(memberCvData) ? memberCvData : [];
+        const ongoingResearchCount = memberCvProfiles.reduce((sum: number, cv: any) => {
+          const works = Array.isArray(cv.research_work) ? cv.research_work.filter(Boolean) : [];
+          const ongoingWorks = works.filter((work: any) =>
+            String(work).toLowerCase().includes("ongoing")
+          );
+          return sum + ongoingWorks.length;
+        }, 0);
+
+        if (!isActive) return;
+        setPublicationCount(publicationCount);
+        setResearchCount(ongoingResearchCount);
+      } catch (error) {
+        console.error("Dashboard impact metric fetch error:", error);
+      }
+    };
+
+    fetchImpactCounts();
+    const intervalId = window.setInterval(fetchImpactCounts, 15000);
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const handleMonthChange = (m: string) => {
     if (m === selectedMonth) return;
     setIsAnimating(true);
@@ -304,12 +347,12 @@ function Dashboard() {
   };
 
   return (
-    <div className="flex flex-col gap-3 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-2 px-2 md:px-4 md:h-[calc(100vh-100px)] md:overflow-hidden overflow-y-auto font-sans">
+    <div className="flex flex-col gap-4 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-2 px-2 md:px-4 md:h-[calc(100vh-100px)] md:overflow-hidden overflow-y-auto font-sans">
       <motion.div 
         animate={{ opacity: isAnimating ? 0.4 : 1, filter: isAnimating ? "blur(4px)" : "blur(0px)" }}
         initial={{ opacity: 0, y: 10 }} 
         transition={{ duration: 0.3 }}
-        className="flex flex-col gap-4 h-full"
+        className="flex flex-col gap-5 h-full"
         style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif" }}
       >
         {/* Month Navigator: Students Section Tab Theme */}
@@ -359,7 +402,7 @@ function Dashboard() {
         </div>
 
         {/* Top Section: Refined Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:h-[154px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 md:h-[160px]">
           <div className="col-span-1 md:col-span-8 flex flex-col gap-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
               {[
@@ -420,7 +463,7 @@ function Dashboard() {
           </div>
 
           {/* Right Block: Luxury Impact Suite - Pastel Theme with Particles */}
-          <div className="col-span-1 md:col-span-4 bg-[#f8f6f1] border border-[#e0dbd2] rounded-2xl p-5 shadow-[0_6px_24px_rgba(26,58,42,0.04)] relative overflow-hidden flex flex-col justify-between group min-h-[154px]">
+          <div className="col-span-1 md:col-span-4 bg-[#f8f6f1] border border-[#e0dbd2] rounded-2xl p-4 shadow-[0_6px_24px_rgba(26,58,42,0.04)] relative overflow-hidden flex flex-col justify-start group min-h-[170px]">
             <div className="absolute inset-0 z-0">
               <Particles
                 particleCount={150}
@@ -434,7 +477,7 @@ function Dashboard() {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-y-7 gap-x-4 relative z-10">
+            <div className="grid grid-cols-2 gap-y-4 gap-x-3 relative z-10">
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
                   <span className="text-3xl font-serif font-black text-[#1a3a2a]">4<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
@@ -443,15 +486,15 @@ function Dashboard() {
               </div>
               <div className="flex flex-col border-l border-[#e0dbd2] pl-6">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">2<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{researchCount}<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
                 </div>
-                <p className="text-[9px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Awards</p>
+                <p className="text-[9px] font-bold text-slate-800 uppercase tracking-[0.1em] mt-1">Ongoing Research Projects</p>
               </div>
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">10<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{publicationCount}<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
                 </div>
-                <p className="text-[9px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Papers</p>
+                <p className="text-[9px] font-bold text-slate-800 uppercase tracking-[0.1em] mt-1">No. of Publications</p>
               </div>
               <div className="flex flex-col border-l border-[#e0dbd2] pl-6">
                 <div className="flex items-baseline gap-1">
@@ -461,7 +504,7 @@ function Dashboard() {
               </div>
             </div>
 
-            <div className="pt-5 mt-2 border-t border-[#e0dbd2] flex items-center justify-between relative z-10">
+            <div className="pt-4 mt-1 border-t border-[#e0dbd2] flex items-center justify-between relative z-10">
               <div>
                 <p className="text-xs font-serif italic text-[#1a3a2a] font-black tracking-tight leading-none">Impact Suite</p>
                 <p className="text-[8px] font-black text-[#6a6050] uppercase tracking-[0.15em] mt-1.5">Lab Results</p>
@@ -476,7 +519,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0 pb-1">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1 min-h-0 pb-1">
           {/* Graph 1: Researchers - Vibrant Ranking */}
           <div className="bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col overflow-hidden group h-full">
             <div className="p-4 pb-0 flex justify-between items-center">
