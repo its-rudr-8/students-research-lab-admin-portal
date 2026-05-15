@@ -304,24 +304,32 @@ export default function MemberCV() {
   // Grid Methods
   const PG = 12;
 
+  const sortedMembers = useMemo(() => [...members].sort((a, b) => { 
+    const isMaster = (s: MemberRecord) => (s.batch?.toLowerCase().includes("master")) || (s.enrollment_no?.toUpperCase().includes("ME")) || (s.student_name?.toLowerCase().includes("ghetiya poojan")); 
+    const aM = isMaster(a) ? 1 : 0, bM = isMaster(b) ? 1 : 0; 
+    if (aM !== bM) return aM - bM; 
+    const x = (a.batch || "").toUpperCase(), y = (b.batch || "").toUpperCase(); 
+    return y < x ? -1 : y > x ? 1 : (a.student_name || "").localeCompare(b.student_name || ""); 
+  }), [members]);
+
   const batches = useMemo(() => {
     const seen = new Set<string>();
     const result: string[] = [];
-    for (const m of members) {
+    for (const m of sortedMembers) {
       const b = (m.batch || "").trim();
       if (b && !seen.has(b)) { seen.add(b); result.push(b); }
     }
     return result.sort((a, b) => b.localeCompare(a));
-  }, [members]);
+  }, [sortedMembers]);
 
   const filteredMembers = useMemo(() => {
     const q = search.toLowerCase();
-    return members.filter((m) => {
+    return sortedMembers.filter((m) => {
       const matchSearch = !q || [m.student_name, m.enrollment_no, m.department, m.batch].some(v => v?.toLowerCase().includes(q));
       const matchBatch = !batchFilter || (m.batch || "").trim() === batchFilter;
       return matchSearch && matchBatch;
     });
-  }, [members, search, batchFilter]);
+  }, [sortedMembers, search, batchFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PG));
   const pagedMembers = filteredMembers.slice((page - 1) * PG, page * PG);
