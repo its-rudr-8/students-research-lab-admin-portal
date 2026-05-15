@@ -4,6 +4,7 @@ import { Trophy, Plus, Clock, Star, ChevronLeft, ChevronRight, Pencil, Trash2, X
 import StudentAvatar from "@/components/StudentAvatar";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { API_BASE_URL } from "@/config/apiConfig";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -68,7 +69,7 @@ export default function Scores() {
   // Bulk Add States
   const [showAddForm, setShowAddForm] = useState(false);
   const [addPeriod, setAddPeriod] = useState("");
-  const [addScores, setAddScores] = useState<{ [enrollment_no: string]: { points: string; hours: string } }>({});
+  const [addScores, setAddScores] = useState<{ [enrollment_no: string]: { points: string } }>({});
   const [searchName, setSearchName] = useState("");
   const [addError, setAddError] = useState("");
   const [adding, setAdding] = useState(false);
@@ -164,6 +165,13 @@ export default function Scores() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE_URL}/api/events`);
+    es.addEventListener("student_changed", () => loadData());
+    es.onerror = () => {};
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     if (cachedLeaderboardStats.length === 0) return;
@@ -276,16 +284,15 @@ export default function Scores() {
     
     // Prepare rows for students with entered scores
     const rows = Object.entries(addScores)
-      .filter(([_, data]) => (data.points !== "" && !isNaN(Number(data.points))) || (data.hours !== "" && !isNaN(Number(data.hours))))
+      .filter(([_, data]) => data.points !== "" && !isNaN(Number(data.points)))
       .map(([enrollment_no, data]) => ({
         enrollment_no,
-        points: data.points !== "" ? parseFloat(data.points) : 0,
-        hours: data.hours !== "" ? parseFloat(data.hours) : 0,
+        points: parseFloat(data.points),
         period: addPeriod
       }));
-    
+
     if (rows.length === 0) {
-      setAddError("Please enter points or hours for at least one student.");
+      setAddError("Please enter points for at least one student.");
       setAdding(false);
       return;
     }
@@ -309,15 +316,11 @@ export default function Scores() {
   };
   
   const handleAddClick = () => {
-    if (showAddForm) {
-      setShowAddForm(false);
-    } else {
-      setShowAddForm(true);
-      setAddPeriod(selectedMonth || monthOptions[0] || "");
-      setAddScores({});
-      setSearchName("");
-      setAddError("");
-    }
+    setShowAddForm(true);
+    setAddPeriod(selectedMonth || monthOptions[0] || "");
+    setAddScores({});
+    setSearchName("");
+    setAddError("");
   };
 
   return (
@@ -366,7 +369,7 @@ export default function Scores() {
               onClick={handleAddClick}
               style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 22px", borderRadius: 50, background: GRN, color: "#fff", fontSize: "0.875rem", fontWeight: 700, cursor: "pointer", border: "none", boxShadow: "0 4px 16px rgba(26,74,52,0.34)", letterSpacing: "0.02em" }}
             >
-              <Plus size={16} strokeWidth={2.5} /> {showAddForm ? "Hide Form" : "Add Score"}
+              <Plus size={16} strokeWidth={2.5} /> Add Score
             </button>
           )}
         </div>
@@ -485,87 +488,80 @@ export default function Scores() {
         )}
       </div>
 
-      {/* Bulk Add Scores Form */}
-      {showAddForm && (
-        <motion.form onSubmit={(e) => { e.preventDefault(); handleAdd(); }} initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-4 sm:p-6 border-2 border-[#EAD8C0]/50 rounded-2xl bg-gradient-to-br from-[#FAF7F2]/30 to-stone-50/20 flex flex-col gap-4 max-w-6xl mx-auto w-full glass-card">
-          <div className="flex flex-col md:flex-row gap-4 md:items-center">
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
-              <label className="font-semibold text-sm text-stone-700 shrink-0">Period:</label>
-              <Select value={addPeriod} onValueChange={setAddPeriod}>
-                <SelectTrigger className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium">
-                  <SelectValue placeholder="Select Period" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
-                  {monthOptions.map(m => (
-                    <SelectItem key={m} value={m} className="font-medium">{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Bulk Add Scores Dialog */}
+      <Dialog open={showAddForm} onOpenChange={(open) => { if (!open) setShowAddForm(false); }}>
+        <DialogContent className="rounded-2xl sm:max-w-3xl max-h-[90vh] flex flex-col" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
+          <DialogHeader>
+            <DialogTitle style={{ color: "#1a1810" }}>Add Scores</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={(e) => { e.preventDefault(); handleAdd(); }} className="flex flex-col gap-4 flex-1 min-h-0">
+            <div className="flex flex-col md:flex-row gap-4 md:items-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
+                <label className="font-semibold text-sm text-stone-700 shrink-0">Period:</label>
+                <Select value={addPeriod} onValueChange={setAddPeriod}>
+                  <SelectTrigger className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium">
+                    <SelectValue placeholder="Select Period" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0]">
+                    {monthOptions.map(m => (
+                      <SelectItem key={m} value={m} className="font-medium">{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
+                <label className="font-semibold text-sm text-stone-700 shrink-0">Search:</label>
+                <input
+                  type="text"
+                  placeholder="Search by student name..."
+                  value={searchName}
+                  onChange={e => setSearchName(e.target.value)}
+                  className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
+                />
+              </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-1">
-              <label className="font-semibold text-sm text-stone-700 shrink-0">Search Name:</label>
-              <input
-                type="text"
-                placeholder="Search by student name..."
-                value={searchName}
-                onChange={e => setSearchName(e.target.value)}
-                className="border-2 border-[#EAD8C0]/40 bg-white px-3 py-2 rounded-lg text-sm flex-1 text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
-              />
-            </div>
-          </div>
-          <div className="overflow-x-auto max-h-96 -mx-4 sm:-mx-6 px-4 sm:px-6">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30 border-b-2 border-[#EAD8C0]/50">
-                  <th className="text-left px-4 py-3 text-[#8B735B] font-bold">Student</th>
-                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Enrollment No.</th>
-                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Points</th>
-                  <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Hours</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cachedStudentsData.filter((s: any) => s.student_name?.toLowerCase().includes(searchName.toLowerCase())).map((student: any, idx: number) => (
-                  <tr key={student.enrollment_no} className={`border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}>
-                    <td className="px-4 py-3 text-stone-700 font-medium">{student.student_name}</td>
-                    <td className="px-4 py-3 text-center text-stone-600 font-mono text-xs">{student.enrollment_no}</td>
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="number"
-                        step="1"
-                        min="0"
-                        value={addScores[student.enrollment_no]?.points || ""}
-                        onChange={e => setAddScores({ ...addScores, [student.enrollment_no]: { ...addScores[student.enrollment_no], points: e.target.value } })}
-                        className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-24 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
-                        placeholder="0"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={addScores[student.enrollment_no]?.hours || ""}
-                        onChange={e => setAddScores({ ...addScores, [student.enrollment_no]: { ...addScores[student.enrollment_no], hours: e.target.value } })}
-                        className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-24 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
-                        placeholder="0.0"
-                      />
-                    </td>
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0">
+                  <tr className="bg-gradient-to-r from-[#EAD8C0]/30 to-stone-100/30 border-b-2 border-[#EAD8C0]/50">
+                    <th className="text-left px-4 py-3 text-[#8B735B] font-bold">Student</th>
+                    <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Enrollment No.</th>
+                    <th className="text-center px-4 py-3 text-[#8B735B] font-bold">Points</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {addError && <div className="text-red-700 text-sm mt-2 p-2 bg-red-50 rounded-md border border-red-300">{addError}</div>}
-          <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={adding} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-2 rounded-lg transition-colors flex-1">
-              {adding ? "Adding..." : "Submit Scores"}
-            </Button>
-            <Button type="button" onClick={() => setShowAddForm(false)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 font-semibold py-2 rounded-lg transition-colors">
-              Close
-            </Button>
-          </div>
-        </motion.form>
-      )}
+                </thead>
+                <tbody>
+                  {cachedStudentsData.filter((s: any) => s.student_name?.toLowerCase().includes(searchName.toLowerCase())).map((student: any, idx: number) => (
+                    <tr key={student.enrollment_no} className={`border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}>
+                      <td className="px-4 py-3 text-stone-700 font-medium">{student.student_name}</td>
+                      <td className="px-4 py-3 text-center text-stone-600 font-mono text-xs">{student.enrollment_no}</td>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          value={addScores[student.enrollment_no]?.points || ""}
+                          onChange={e => setAddScores({ ...addScores, [student.enrollment_no]: { ...addScores[student.enrollment_no], points: e.target.value } })}
+                          className="border-2 border-[#EAD8C0]/40 bg-white px-2 py-2 rounded-md w-24 text-center text-stone-700 font-medium focus:outline-none focus:border-[#EAD8C0] focus:ring-2 focus:ring-[#EAD8C0]/20"
+                          placeholder="0"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {addError && <div className="text-red-700 text-sm p-2 bg-red-50 rounded-md border border-red-300">{addError}</div>}
+            <div className="flex gap-3 pt-1">
+              <Button type="submit" disabled={adding} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-2 rounded-lg transition-colors flex-1">
+                {adding ? "Adding..." : "Submit Scores"}
+              </Button>
+              <Button type="button" onClick={() => setShowAddForm(false)} className="bg-stone-200 hover:bg-stone-300 text-stone-700 font-semibold py-2 rounded-lg transition-colors">
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Modals */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

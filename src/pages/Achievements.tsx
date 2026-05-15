@@ -25,6 +25,10 @@ interface Achievement {
   created_at?: string;
 }
 
+const todayStr = new Date().toISOString().split("T")[0];
+const isValidUrl = (url: string) =>
+  !url || /^(https?:\/\/)?(([\w-]+\.)+[\w-]{2,})(\/[\w\-./?%&=#]*)?$/i.test(url);
+
 export default function Achievements() {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,12 +85,13 @@ export default function Achievements() {
   const handleAddAchievement = async () => {
     if (!canEdit) return;
 
-    if (!formData.title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing required fields",
-        description: "Title is required.",
-      });
+    const errs: string[] = [];
+    if (!formData.title.trim()) errs.push("Title is required.");
+    if (!formData.achievement_date) errs.push("Date is required.");
+    if (!isValidUrl(formData.linkedin_url)) errs.push("LinkedIn URL is not a valid URL.");
+    if (formData.achievement_date && formData.achievement_date > todayStr) errs.push("Date cannot be in the future.");
+    if (errs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") });
       return;
     }
 
@@ -171,6 +176,16 @@ export default function Achievements() {
 
   const handleUpdateAchievement = async () => {
     if (!editingAchievement || !canEdit) return;
+
+    const errs: string[] = [];
+    if (!editFormData.title.trim()) errs.push("Title is required.");
+    if (!editFormData.achievement_date) errs.push("Date is required.");
+    if (!isValidUrl(editFormData.linkedin_url)) errs.push("LinkedIn URL is not a valid URL.");
+    if (editFormData.achievement_date && editFormData.achievement_date > todayStr) errs.push("Date cannot be in the future.");
+    if (errs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") });
+      return;
+    }
 
     try {
       setEditSubmitting(true);
@@ -264,7 +279,7 @@ export default function Achievements() {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-[#8B735B] font-bold">Date</Label>
-                          <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.achievement_date} onChange={(e) => setFormData({ ...formData, achievement_date: e.target.value })} />
+                          <Input type="date" max={todayStr} className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.achievement_date} onChange={(e) => setFormData({ ...formData, achievement_date: e.target.value })} />
                         </div>
                       </div>
                       <ImageUpload label="Achievement Media" onImageUpload={(url) => setFormData(prev => ({ ...prev, image_url: url }))} currentImage={formData.image_url} section="achievement" mediaType="both" maxSize={50} />
@@ -409,7 +424,7 @@ export default function Achievements() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[#8B735B] font-bold">Date</Label>
-                  <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.achievement_date} onChange={(e) => setEditFormData({ ...editFormData, achievement_date: e.target.value })} />
+                  <Input type="date" max={todayStr} className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.achievement_date} onChange={(e) => setEditFormData({ ...editFormData, achievement_date: e.target.value })} />
                 </div>
               </div>
               <ImageUpload label="Achievement Media" onImageUpload={(url) => setEditFormData(prev => ({ ...prev, image_url: url }))} currentImage={editFormData.image_url} section="achievement" mediaType="both" maxSize={50} />

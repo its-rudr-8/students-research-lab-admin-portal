@@ -40,6 +40,10 @@ interface TimelineEntry {
   created_at?: string;
 }
 
+const todayStr = new Date().toISOString().split("T")[0];
+const isValidUrl = (url: string) =>
+  !url || /^(https?:\/\/)?(([\w-]+\.)+[\w-]{2,})(\/[\w\-./?%&=#]*)?$/i.test(url);
+
 export default function Timeline() {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,12 +109,13 @@ export default function Timeline() {
       return;
     }
 
-    if (!formData.title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing required fields",
-        description: "Title is required.",
-      });
+    const errs: string[] = [];
+    if (!formData.title.trim()) errs.push("Title is required.");
+    if (!formData.session_date) errs.push("Date is required.");
+    if (!isValidUrl(formData.linkedin_url)) errs.push("LinkedIn URL is not a valid URL.");
+    if (formData.session_date && formData.session_date > todayStr) errs.push("Date cannot be in the future.");
+    if (errs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") });
       return;
     }
 
@@ -229,12 +234,13 @@ export default function Timeline() {
 
     if (!editingEntry) return;
 
-    if (!editFormData.title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing required fields",
-        description: "Title is required.",
-      });
+    const editErrs: string[] = [];
+    if (!editFormData.title.trim()) editErrs.push("Title is required.");
+    if (!editFormData.session_date) editErrs.push("Date is required.");
+    if (!isValidUrl(editFormData.linkedin_url)) editErrs.push("LinkedIn URL is not a valid URL.");
+    if (editFormData.session_date && editFormData.session_date > todayStr) editErrs.push("Date cannot be in the future.");
+    if (editErrs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: editErrs.join(" ") });
       return;
     }
 
@@ -338,6 +344,7 @@ export default function Timeline() {
                         mode="single"
                         selected={formData.session_date ? new Date(formData.session_date) : undefined}
                         onSelect={(date) => setFormData({ ...formData, session_date: date ? format(date, "yyyy-MM-dd") : "" })}
+                        disabled={{ after: new Date() }}
                         initialFocus
                         className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left"
                         classNames={{
@@ -474,6 +481,7 @@ export default function Timeline() {
                       mode="single"
                       selected={editFormData.session_date ? new Date(editFormData.session_date) : undefined}
                       onSelect={(date) => setEditFormData({ ...editFormData, session_date: date ? format(date, "yyyy-MM-dd") : "" })}
+                      disabled={{ after: new Date() }}
                       initialFocus
                       className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left"
                       classNames={{

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Pencil, Plus, Trash2, BookOpen, Calendar as CalendarIcon, ExternalLink, Users, Building2, Landmark, GraduationCap, Upload, X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { API_BASE_URL } from "@/config/apiConfig";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -146,6 +147,11 @@ export default function Publications() {
 
   // Publisher logo state
   const [publishers, setPublishers] = useState<Publisher[]>([]);
+  const sortedPublishers = useMemo(() => {
+    const other = publishers.filter(p => p.publisher_name.toLowerCase() === "other");
+    const rest   = publishers.filter(p => p.publisher_name.toLowerCase() !== "other");
+    return [...rest, ...other];
+  }, [publishers]);
   const [publisherLogoId, setPublisherLogoId] = useState<number | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
@@ -159,6 +165,34 @@ export default function Publications() {
     fetchPublications();
     fetchPublishers();
   }, []);
+
+  // Real-time: listen for new pending submissions and approve/reject updates
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE_URL}/api/events`);
+
+    es.addEventListener('publication_pending', () => {
+      fetchPublications();
+      toast({
+        title: "New publication request",
+        description: "A new publication is waiting for your approval.",
+      });
+    });
+
+    // Re-sync after approve/reject so the All-publications tab stays consistent
+    es.addEventListener('publication_approved', () => {
+      fetchPublications();
+    });
+
+    es.addEventListener('publication_rejected', () => {
+      fetchPublications();
+    });
+
+    es.onerror = () => {
+      // EventSource auto-reconnects — no manual action needed
+    };
+
+    return () => es.close();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchPublishers = async () => {
     try {
@@ -761,7 +795,7 @@ export default function Publications() {
                       <SelectValue placeholder="Select publisher" />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-[#EAD8C0]">
-                      {publishers.map((p) => (
+                      {sortedPublishers.map((p) => (
                         <SelectItem key={p.id} value={p.publisher_name} className="focus:bg-[#8B735B] focus:text-white text-[#8B735B] cursor-pointer">
                           {p.publisher_name}
                         </SelectItem>

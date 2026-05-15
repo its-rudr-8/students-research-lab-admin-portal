@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Filter, Calendar, Mail, Phone, ExternalLink, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { getEventsUrl } from "@/hooks/useServerEvents";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -50,34 +51,75 @@ export default function JoinRequests() {
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchRows();
-  }, []);
-
-  const fetchRows = async () => {
-    setLoading(true);
+  const fetchRows = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const response = await adminAPI.getJoinRequests();
-      
+
       setRows(
         parseList(response).map((row: any) => ({
           ...row,
           id: String(row.id),
           status: String(row.status || "pending").trim().toLowerCase(),
-          batch: "2026",
+          batch: String(row.batch || "").trim() || "2026",
           research_expertise: Array.isArray(row.research_expertise) ? row.research_expertise : [],
         }))
       );
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error fetching join requests",
-        description: error.message,
-      });
-      setRows([]);
+      if (!opts?.silent) {
+        toast({
+          variant: "destructive",
+          title: "Error fetching join requests",
+          description: error.message,
+        });
+        setRows([]);
+      }
     }
-    setLoading(false);
-  };
+    if (!opts?.silent) setLoading(false);
+  }, [toast]);
+
+  useEffect(() => {
+    fetchRows();
+  }, [fetchRows]);
+
+  const handleJoinEvent = useCallback(
+    (payload: Record<string, unknown>) => {
+      fetchRows({ silent: true });
+
+      const action = payload.action;
+      if (action === "created" || action === "pending") {
+        const name = typeof payload.name === "string" ? payload.name : "";
+        toast({
+          title: "New join request",
+          description: name
+            ? `${name} submitted a Join Us application.`
+            : "A student submitted a Join Us application.",
+        });
+        setCurrentPage(1);
+      }
+    },
+    [fetchRows, toast],
+  );
+
+  // Real-time updates (same dedicated EventSource pattern as Publications page)
+  useEffect(() => {
+    const es = new EventSource(getEventsUrl());
+
+    const onEvent = (event: Event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data) as Record<string, unknown>;
+        handleJoinEvent(payload);
+      } catch {
+        handleJoinEvent({});
+      }
+    };
+
+    es.addEventListener("join_request_changed", onEvent);
+    es.addEventListener("join_request_pending", onEvent);
+    es.onerror = () => {};
+
+    return () => es.close();
+  }, [handleJoinEvent]);
 
   const filteredRows = useMemo(() => {
     if (yearFilter === "all") return rows;
@@ -115,9 +157,14 @@ export default function JoinRequests() {
   const handleAccept = async (id: string) => {
     setUpdatingId(id);
     try {
-      await adminAPI.updateJoinRequest(id, "approved");
+      const res = await adminAPI.updateJoinRequest(id, "approved");
       setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
-      toast({ title: "Request accepted" });
+      toast({
+        title: "Request accepted",
+        description: res?.student
+          ? `${res.student.student_name || "Student"} added to the Students section.`
+          : "Student record synced to the Students section.",
+      });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
@@ -396,4 +443,4 @@ export default function JoinRequests() {
       )}
     </div>
   );
-}
+}

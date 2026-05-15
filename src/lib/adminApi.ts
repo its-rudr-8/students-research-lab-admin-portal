@@ -3,12 +3,7 @@
  * Centralized API client for all admin CRUD operations
  */
 
-const RAW_API_BASE_URL =
-  import.meta.env.VITE_BACKEND_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://127.0.0.1:8000/api";
-
-const API_BASE_URL = RAW_API_BASE_URL.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+import { API_BASE_URL } from "@/config/apiConfig";
 
 // Get token from localStorage
 const getAuthToken = (): string | null => {
@@ -96,7 +91,8 @@ const apiCall = async (
       }
 
       // Extract error message — handle FastAPI {detail}, Django {detail/error}, or generic {message}
-      let errorMessage = errorData.message || errorData.error;
+      let errorMessage =
+        errorData.message || errorData.error || errorData.detail;
       if (!errorMessage && errorData.detail) {
         if (typeof errorData.detail === "string") {
           errorMessage = errorData.detail;

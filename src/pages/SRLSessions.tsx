@@ -67,6 +67,10 @@ const MediaRenderer = ({ url, className, showControls = false }: { url: string; 
   return <img src={url} alt="Preview" className={cn("w-full h-full object-cover", className)} />;
 };
 
+const todayStr = new Date().toISOString().split("T")[0];
+const isValidUrl = (url: string) =>
+  !url || /^(https?:\/\/)?(([\w-]+\.)+[\w-]{2,})(\/[\w\-./?%&=#]*)?$/i.test(url);
+
 export default function SRLSessions() {
   const [sessions, setSessions] = useState<SRLSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,12 +128,13 @@ export default function SRLSessions() {
   const handleAddSession = async () => {
     if (!canEdit) return;
 
-    if (!formData.title.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Missing required fields",
-        description: "Title is required.",
-      });
+    const errs: string[] = [];
+    if (!formData.title.trim()) errs.push("Title is required.");
+    if (!formData.session_date) errs.push("Session date is required.");
+    if (!isValidUrl(formData.linkedin_url)) errs.push("Resource link is not a valid URL.");
+    if (formData.session_date && formData.session_date > todayStr) errs.push("Session date cannot be in the future.");
+    if (errs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") });
       return;
     }
 
@@ -211,6 +216,16 @@ export default function SRLSessions() {
 
   const handleUpdateSession = async () => {
     if (!editingSession || !canEdit) return;
+
+    const errs: string[] = [];
+    if (!editFormData.title.trim()) errs.push("Title is required.");
+    if (!editFormData.session_date) errs.push("Session date is required.");
+    if (!isValidUrl(editFormData.linkedin_url)) errs.push("Resource link is not a valid URL.");
+    if (editFormData.session_date && editFormData.session_date > todayStr) errs.push("Session date cannot be in the future.");
+    if (errs.length) {
+      toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") });
+      return;
+    }
 
     try {
       setEditSubmitting(true);
@@ -301,7 +316,7 @@ export default function SRLSessions() {
                         </div>
                         <div className="space-y-1.5">
                           <Label className="text-[#8B735B] font-bold">Session Date</Label>
-                          <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.session_date} onChange={(e) => setFormData({ ...formData, session_date: e.target.value })} />
+                          <Input type="date" max={todayStr} className="rounded-xl border-[#EAD8C0]/40 bg-white" value={formData.session_date} onChange={(e) => setFormData({ ...formData, session_date: e.target.value })} />
                         </div>
                       </div>
                       
@@ -476,7 +491,7 @@ export default function SRLSessions() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[#8B735B] font-bold">Session Date</Label>
-                  <Input type="date" className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.session_date} onChange={(e) => setEditFormData({ ...editFormData, session_date: e.target.value })} />
+                  <Input type="date" max={todayStr} className="rounded-xl border-[#EAD8C0]/40 bg-white" value={editFormData.session_date} onChange={(e) => setEditFormData({ ...editFormData, session_date: e.target.value })} />
                 </div>
               </div>
 

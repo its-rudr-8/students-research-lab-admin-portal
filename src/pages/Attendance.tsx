@@ -6,6 +6,7 @@ import StudentAvatar from "@/components/StudentAvatar";
 import { cn } from "@/lib/utils";
 import { getStoredUser, hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { API_BASE_URL } from "@/config/apiConfig";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -55,6 +56,7 @@ export default function Attendance() {
   const [allDates, setAllDates] = useState<string[]>([]);
   const [cachedAttendanceData, setCachedAttendanceData] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const canEdit = hasWriteAccess();
   const currentUser = getStoredUser();
   const ownEnrollment = String(currentUser?.enrollmentNo || "").trim();
@@ -92,6 +94,13 @@ export default function Attendance() {
       }
     };
     fetchInitialData();
+  }, [refreshKey]);
+
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE_URL}/api/events`);
+    es.addEventListener("student_changed", () => setRefreshKey((k) => k + 1));
+    es.onerror = () => {};
+    return () => es.close();
   }, []);
 
   // Process data for selected date - uses cached data
@@ -231,6 +240,7 @@ export default function Attendance() {
                     mode="single"
                     selected={addDate ? new Date(addDate) : undefined}
                     onSelect={(date) => setAddDate(date ? format(date, "yyyy-MM-dd") : "")}
+                    disabled={{ after: new Date() }}
                     initialFocus
                     className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-xl"
                     classNames={{
@@ -267,9 +277,12 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody>
-                {students.filter(student => student.name.toLowerCase().includes(searchName.toLowerCase())).map((student, idx) => (
+                {cachedStudentsData
+                  .filter((s: any) => String(s.member_type || "member").toLowerCase() !== "admin")
+                  .filter((s: any) => s.student_name?.toLowerCase().includes(searchName.toLowerCase()))
+                  .map((student: any, idx: number) => (
                   <tr key={student.enrollment_no} className={`border-b border-[#EAD8C0]/20 hover:bg-[#EAD8C0]/10 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-[#FAF7F2]/50'}`}>
-                    <td className="px-4 py-3 text-stone-700 font-medium">{student.name}</td>
+                    <td className="px-4 py-3 text-stone-700 font-medium">{student.student_name}</td>
                     <td className="px-4 py-3 text-center text-stone-600 font-mono text-xs">{student.enrollment_no}</td>
                     <td className="px-4 py-3 text-center">
                       <input

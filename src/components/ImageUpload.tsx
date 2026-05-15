@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, X, Loader2, Image as ImageIcon, Film } from "lucide-react";
+import { Upload, X, Loader2, Film } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { adminAPI } from "@/lib/adminApi";
@@ -165,7 +165,7 @@ export default function ImageUpload({
 
       <div
         className={cn(
-          "relative border-2 border-dashed border-[#EAD8C0]/60 transition-all hover:border-teal-600/50 cursor-pointer overflow-hidden group",
+          "relative border-2 border-dashed border-[#EAD8C0]/60 transition-all hover:border-teal-600/50 cursor-pointer group",
           variant === "avatar"
             ? "w-32 h-32 mx-auto rounded-full p-1.5 flex items-center justify-center bg-white shadow-sm"
             : "w-full rounded-2xl p-4 min-h-[160px] bg-white/50 hover:bg-white/80"
@@ -250,7 +250,7 @@ export default function ImageUpload({
               )}
               
               {uploading && (
-                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center text-white gap-2">
+                <div className={cn("absolute inset-0 bg-black/40 backdrop-blur-[2px] flex flex-col items-center justify-center text-white gap-2", variant === "avatar" && "rounded-full")}>
                   <Loader2 className="w-8 h-8 animate-spin" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Updating...</span>
                 </div>

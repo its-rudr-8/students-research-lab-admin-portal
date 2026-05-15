@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { clearSession, getStoredUser, hasWriteAccess } from "@/lib/auth";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { useServerEventsConnection } from "@/hooks/useServerEvents";
 
 const allNavItems = [
   { title: "Dashboard", path: "/", icon: LayoutDashboard, requiresAdmin: false },
@@ -62,6 +63,9 @@ const pageNames: Record<string, string> = {
 };
 
 export default function AdminLayout() {
+  // Single persistent SSE connection for all admin pages (join requests, publications, etc.)
+  useServerEventsConnection();
+
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
   const location = useLocation();
