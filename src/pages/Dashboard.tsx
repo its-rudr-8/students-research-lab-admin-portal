@@ -33,6 +33,7 @@ import {
 import Particles from "@/components/ui/Particles";
 import { getStoredUser } from "@/lib/auth";
 import { adminAPI } from "@/lib/adminApi";
+import { API_BASE_URL } from "@/config/apiConfig";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
@@ -46,6 +47,7 @@ function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState("May");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Data States
   const [totalStudents, setTotalStudents] = useState(0);
@@ -295,7 +297,14 @@ function Dashboard() {
       } catch (error) { console.error("Dashboard error:", error); }
     };
     fetchData();
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, refreshKey]);
+
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE_URL}/api/events`);
+    es.addEventListener("student_changed", () => setRefreshKey((k) => k + 1));
+    es.onerror = () => {};
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     let isActive = true;

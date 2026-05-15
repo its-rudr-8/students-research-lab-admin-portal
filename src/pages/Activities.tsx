@@ -77,6 +77,7 @@ function DatePicker({
           mode="single"
           selected={value ? new Date(value) : undefined}
           onSelect={(date) => onChange(date ? format(date, "yyyy-MM-dd") : "")}
+          disabled={{ after: new Date() }}
           initialFocus
           className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left"
           classNames={{
@@ -92,19 +93,25 @@ function DatePicker({
   );
 }
 
+const isValidUrl = (url: string) =>
+  !url || /^(https?:\/\/)?(([\w-]+\.)+[\w-]{2,})(\/[\w\-./?%&=#]*)?$/i.test(url);
+
 // ─── Shared form body ─────────────────────────────────────────────────────────
 
 function ActivityFormBody({
   data,
   set,
   onImageUpload,
+  errors = {},
 }: {
   data: ActivityForm;
   set: React.Dispatch<React.SetStateAction<ActivityForm>>;
   onImageUpload: (url: string) => void;
+  errors?: Record<string, string>;
 }) {
   const lbl = "text-[#8B735B] font-bold text-sm";
   const inp = "rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]";
+  const inpErr = "rounded-xl border-red-400 bg-white focus:border-red-400 focus:ring-1 focus:ring-red-200";
 
   return (
     <div className="space-y-5 pt-2">
@@ -116,10 +123,11 @@ function ActivityFormBody({
           <Label className={lbl}>Title *</Label>
           <Input
             placeholder="Activity / event title"
-            className={inp}
+            className={errors.title ? inpErr : inp}
             value={data.title}
             onChange={(e) => set((prev) => ({ ...prev, title: e.target.value }))}
           />
+          {errors.title && <p className="text-xs text-red-500 mt-0.5">{errors.title}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -142,10 +150,11 @@ function ActivityFormBody({
             <Input
               type="url"
               placeholder="https://..."
-              className={inp}
+              className={errors.link ? inpErr : inp}
               value={data.link}
               onChange={(e) => set((prev) => ({ ...prev, link: e.target.value }))}
             />
+            {errors.link && <p className="text-xs text-red-500 mt-0.5">{errors.link}</p>}
           </div>
         </div>
       </div>
@@ -190,6 +199,8 @@ export default function Activities() {
 
   const [formData, setFormData] = useState<ActivityForm>(EMPTY_FORM());
   const [editFormData, setEditFormData] = useState<ActivityForm>(EMPTY_FORM());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
@@ -216,10 +227,12 @@ export default function Activities() {
 
   const handleAddActivity = async () => {
     if (!canEdit) return;
-    if (!formData.title.trim()) {
-      toast({ variant: "destructive", title: "Validation error", description: "Title is required." });
-      return;
-    }
+    const errs: Record<string, string> = {};
+    if (!formData.title.trim()) errs.title = "Title is required.";
+    if (!formData.date) errs.date = "Date is required.";
+    if (!isValidUrl(formData.link)) errs.link = "Enter a valid URL (e.g. https://example.com).";
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setErrors({});
     try {
       setSubmitting(true);
       const payload = {
@@ -227,7 +240,7 @@ export default function Activities() {
         description: formData.description.trim() || null,
         link: formData.link.trim() || null,
         brief: formData.brief.trim() || null,
-        date: formData.date || new Date().toISOString().split("T")[0],
+        date: formData.date,
         Photo: formData.Photo || null,
       };
       console.log("[Activities] CREATE payload:", payload);
@@ -263,10 +276,12 @@ export default function Activities() {
 
   const handleUpdateActivity = async () => {
     if (!canEdit || !editingActivity) return;
-    if (!editFormData.title.trim()) {
-      toast({ variant: "destructive", title: "Validation error", description: "Title is required." });
-      return;
-    }
+    const errs: Record<string, string> = {};
+    if (!editFormData.title.trim()) errs.title = "Title is required.";
+    if (!editFormData.date) errs.date = "Date is required.";
+    if (!isValidUrl(editFormData.link)) errs.link = "Enter a valid URL (e.g. https://example.com).";
+    if (Object.keys(errs).length) { setEditErrors(errs); return; }
+    setEditErrors({});
     try {
       setSubmitting(true);
       const payload = {
@@ -335,7 +350,7 @@ export default function Activities() {
       {/* ── Add button + dialog ── */}
       {canEdit && (
         <div className="flex justify-start sm:justify-end">
-          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setFormData(EMPTY_FORM()); }}>
+          <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setFormData(EMPTY_FORM()); setErrors({}); } }}>
             <DialogTrigger asChild>
               <Button size="sm" className="bg-teal-700 hover:bg-teal-800 text-white rounded-xl gap-1.5 font-bold shadow-md">
                 <Plus className="w-3.5 h-3.5" />
@@ -354,6 +369,7 @@ export default function Activities() {
                   console.log("[Activities] Add form — image uploaded, url:", url);
                   setFormData((prev) => ({ ...prev, Photo: url }));
                 }}
+                errors={errors}
               />
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" className="rounded-xl border-[#EAD8C0] text-[#8B735B] hover:bg-[#EAD8C0]/20" onClick={() => setOpen(false)}>
@@ -370,7 +386,7 @@ export default function Activities() {
 
       {/* ── Edit dialog ── */}
       {canEdit && (
-        <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditingActivity(null); }}>
+        <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) { setEditingActivity(null); setEditErrors({}); } }}>
           <DialogContent className={dialogCls}>
             <DialogHeader>
               <DialogTitle className="text-[#8B735B] font-bold">Edit Activity / Event</DialogTitle>
@@ -382,6 +398,7 @@ export default function Activities() {
                 console.log("[Activities] Edit form — image uploaded, url:", url);
                 setEditFormData((prev) => ({ ...prev, Photo: url }));
               }}
+              errors={editErrors}
             />
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" className="rounded-xl border-[#EAD8C0] text-[#8B735B] hover:bg-[#EAD8C0]/20" onClick={() => setEditOpen(false)}>

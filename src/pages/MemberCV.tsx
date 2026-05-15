@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, Pencil, FileText, Award, Folder, Trophy, Edit2, Check, ArrowLeft, ArrowRight, Users } from "lucide-react";
+import { API_BASE_URL } from "@/config/apiConfig";
+import { Loader2, Search, Pencil, FileText, Folder, Trophy, Check, ArrowLeft, Users } from "lucide-react";
+import BatchTabs from "@/components/BatchTabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,7 @@ type MemberRecord = {
   department?: string;
   member_type?: string;
   profile_image?: string;
-  // Mock properties for UI demonstration
+  batch?: string;
   cv_completion?: number;
   hacks?: number;
   papers?: number;
@@ -81,16 +83,6 @@ const textToArr = (s: string): string[] =>
   s.split("\n").map((l) => l.trim()).filter(Boolean);
 
 
-const getBatchString = (member: any) => {
-  const name = member.student_name || "";
-  if (name.toLowerCase().includes("poojan ghetiya")) return "Batch 2025-2029";
-  const enrollmentNo = member.enrollment_no;
-  if (!enrollmentNo || enrollmentNo.length < 2) return "Other";
-  const prefix = parseInt(enrollmentNo.substring(0, 2), 10);
-  if (isNaN(prefix) || prefix < 10 || prefix > 99) return "Other";
-  const startYear = 2000 + prefix;
-  return `Batch ${startYear}-${startYear + 4}`;
-};
 
 const TextSection = ({ label, field, placeholder, hint, formData, setFormData, disabled }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string; formData: CVFormData; setFormData: React.Dispatch<React.SetStateAction<CVFormData>>; disabled: boolean }) => (
   <div className="space-y-2">
@@ -118,13 +110,11 @@ export default function MemberCV() {
 
   // Grid states
   const [showGrid, setShowGrid] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+  const [batchFilter, setBatchFilter] = useState("");
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    setCurrentBatchIndex(0);
-  }, [search, filter]);
 
   const { toast } = useToast();
   const currentUser = useMemo(() => getStoredUser(), []);
@@ -212,7 +202,14 @@ export default function MemberCV() {
       }
     };
     fetchMembers();
-  }, [currentUser, isAdmin]);
+  }, [currentUser, isAdmin, refreshKey]);
+
+  useEffect(() => {
+    const es = new EventSource(`${API_BASE_URL}/api/events`);
+    es.addEventListener("student_changed", () => setRefreshKey((k) => k + 1));
+    es.onerror = () => {};
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -262,20 +259,6 @@ export default function MemberCV() {
 
   const canEditSelected = !!selectedEnrollment && (!!isAdmin || (currentUser?.enrollmentNo && currentUser.enrollmentNo === selectedEnrollment));
 
-  const profileCompletion = useMemo(() => {
-    const sections = [
-      formData.reflection.trim().length > 0,
-      formData.research_work.trim().length > 0,
-      formData.hackathons.trim().length > 0,
-      formData.research_papers.trim().length > 0,
-    ];
-    const completed = sections.filter(Boolean).length;
-    const total = sections.length;
-    return { completed, total, percent: Math.round((completed / total) * 100) };
-  }, [formData]);
-
-  // Removed inline TextSection
-
   const handleSave = async () => {
     if (!selectedMember || !selectedEnrollment)
       return toast({ variant: "destructive", title: "No profile selected", description: "Please select a member profile first." });
@@ -306,6 +289,11 @@ export default function MemberCV() {
       };
       await adminAPI.updateMemberCV(payload);
       toast({ title: "Profile saved", description: `CV updated for ${selectedMember.student_name}.` });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (isAdmin) {
+        setSelectedEnrollment("");
+        setShowGrid(true);
+      }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save failed", description: error.message || "Could not save profile." });
     } finally {
@@ -314,52 +302,34 @@ export default function MemberCV() {
   };
 
   // Grid Methods
+  const PG = 12;
+
+  const batches = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const m of members) {
+      const b = (m.batch || "").trim();
+      if (b && !seen.has(b)) { seen.add(b); result.push(b); }
+    }
+    return result.sort((a, b) => b.localeCompare(a));
+  }, [members]);
+
   const filteredMembers = useMemo(() => {
+    const q = search.toLowerCase();
     return members.filter((m) => {
-      const matchSearch = m.student_name?.toLowerCase().includes(search.toLowerCase()) || m.enrollment_no?.toLowerCase().includes(search.toLowerCase());
-      if (!matchSearch) return false;
-      if (filter === "verified") return m.verified;
-      if (filter === "unverified") return !m.verified;
-      return true;
+      const matchSearch = !q || [m.student_name, m.enrollment_no, m.department, m.batch].some(v => v?.toLowerCase().includes(q));
+      const matchBatch = !batchFilter || (m.batch || "").trim() === batchFilter;
+      return matchSearch && matchBatch;
     });
-  }, [members, search, filter]);
+  }, [members, search, batchFilter]);
 
-  const groupedMembers = useMemo(() => {
-    const groups: Record<string, MemberRecord[]> = {};
-    filteredMembers.forEach((m) => {
-      const batch = getBatchString(m);
-      if (!groups[batch]) groups[batch] = [];
-      groups[batch].push(m);
-    });
+  const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PG));
+  const pagedMembers = filteredMembers.slice((page - 1) * PG, page * PG);
 
-    // Sort members within each batch alphabetically by name
-    Object.values(groups).forEach(batchMembers => {
-      batchMembers.sort((a, b) => (a.student_name || "").localeCompare(b.student_name || ""));
-    });
-
-    // Sort batches descending so newest batch (2024) is first, but 2025-2029 and Other at the bottom
-    const sortedBatches = Object.keys(groups).sort((a, b) => {
-      const getWeight = (batch: string) => {
-        if (batch === "Other") return 2;
-        if (batch === "Batch 2025-2029") return 1;
-        return 0; // Normal batches
-      };
-      
-      const weightA = getWeight(a);
-      const weightB = getWeight(b);
-      
-      if (weightA !== weightB) {
-        return weightA - weightB;
-      }
-      
-      return b.localeCompare(a);
-    });
-
-    return sortedBatches.map(batch => ({
-      batch,
-      members: groups[batch]
-    }));
-  }, [filteredMembers]);
+  useEffect(() => { setPage(1); }, [search, batchFilter]);
+  useEffect(() => {
+    if (batchFilter && !batches.includes(batchFilter)) setBatchFilter("");
+  }, [batches, batchFilter]);
 
   // Render Grid View
   if (isAdmin && showGrid) {
@@ -373,6 +343,8 @@ export default function MemberCV() {
             </div>
           </div>
 
+          <BatchTabs batches={batches} selected={batchFilter} onSelect={(v) => { setBatchFilter(v); setPage(1); }} />
+
           {loadingMembers ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -383,53 +355,45 @@ export default function MemberCV() {
               No researchers found matching your criteria.
             </div>
           ) : (
-            <div className="space-y-10">
-              {groupedMembers[currentBatchIndex] && (
-                <div key={groupedMembers[currentBatchIndex].batch} className="space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 justify-between">
-                    <div className="flex items-center gap-3">
-                      <Button variant="outline" size="icon" className="rounded-full w-9 h-9 border-[#D4C9B6] text-[#2A5D4B] hover:bg-[#EAE1D2]" onClick={() => setCurrentBatchIndex(Math.max(0, currentBatchIndex - 1))} disabled={currentBatchIndex === 0}>
-                        <ArrowLeft className="w-4 h-4" />
-                      </Button>
-                      <h3 className="text-lg sm:text-xl font-bold text-[#1a1810] tracking-tight">{groupedMembers[currentBatchIndex].batch}</h3>
-                      <Button variant="outline" size="icon" className="rounded-full w-9 h-9 border-[#D4C9B6] text-[#2A5D4B] hover:bg-[#EAE1D2]" onClick={() => setCurrentBatchIndex(Math.min(groupedMembers.length - 1, currentBatchIndex + 1))} disabled={currentBatchIndex === groupedMembers.length - 1}>
-                        <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <div className="hidden sm:block h-px bg-[#D4C9B6] flex-1" />
-                    <span className="self-start sm:self-auto text-[11px] sm:text-xs font-bold text-primary bg-[#EAE1D2] px-2 py-1 rounded-md border border-[#D4C9B6] uppercase tracking-widest">{groupedMembers[currentBatchIndex].members.length} members</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-                    <AnimatePresence mode="popLayout">
-                      {groupedMembers[currentBatchIndex].members.map((member, i) => {
-                        return (
-                          <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: i * 0.05 }} key={member.enrollment_no} className="group relative">
-                            <div className="relative overflow-hidden rounded-[20px] bg-white border transition-all duration-300 border-[#D4C9B6] shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-primary/40">
-                              <div className="h-16 bg-gradient-to-r from-[#EAE1D2] to-[#D4C9B6]/30 w-full absolute top-0 left-0" />
-                              <div className="p-5 pt-8 relative z-0 flex flex-col items-center">
-                                <StudentAvatar name={member.student_name} photoUrl={member.profile_image} enrollmentNo={member.enrollment_no} className="w-20 h-20 border-4 border-white shadow-sm mb-3" />
-                                <h3 className="font-bold text-[#1a1810] text-center line-clamp-1">{member.student_name}</h3>
-                                <p className="text-xs text-muted-foreground font-mono mt-0.5">{member.enrollment_no}</p>
-                                <div className="grid grid-cols-3 w-full gap-1 sm:gap-2 mt-4 sm:mt-5 py-3 border-y border-dashed border-[#D4C9B6]">
-                                  <div className="text-center"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.ongoing}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Ongoing</p></div>
-                                  <div className="text-center border-l border-dashed border-[#D4C9B6]"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.hacks}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Hacks</p></div>
-                                  <div className="text-center border-l border-dashed border-[#D4C9B6]"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.papers}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Papers</p></div>
-                                </div>
-                                <div className="w-full mt-4">
-                                  <Button variant="default" className="w-full rounded-xl text-xs font-semibold bg-primary hover:bg-primary/90 text-white shadow-sm h-9" onClick={() => { setSelectedEnrollment(member.enrollment_no); setShowGrid(false); }}>
-                                    <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Profile
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </AnimatePresence>
-                  </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+                <AnimatePresence mode="popLayout">
+                  {pagedMembers.map((member, i) => (
+                    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ delay: i * 0.05 }} key={member.enrollment_no} className="group relative">
+                      <div className="relative overflow-hidden rounded-[20px] bg-white border transition-all duration-300 border-[#D4C9B6] shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:border-primary/40">
+                        <div className="h-16 bg-gradient-to-r from-[#EAE1D2] to-[#D4C9B6]/30 w-full absolute top-0 left-0" />
+                        <div className="p-5 pt-8 relative z-0 flex flex-col items-center">
+                          <StudentAvatar name={member.student_name} photoUrl={member.profile_image} enrollmentNo={member.enrollment_no} className="w-20 h-20 border-4 border-white shadow-sm mb-3" />
+                          <h3 className="font-bold text-[#1a1810] text-center line-clamp-1">{member.student_name}</h3>
+                          <p className="text-xs text-muted-foreground font-mono mt-0.5">{member.enrollment_no}</p>
+                          {(member.batch || "").trim() && (
+                            <p className="text-[10px] text-primary/70 font-medium mt-0.5">Batch {(member.batch || "").trim()}</p>
+                          )}
+                          <div className="grid grid-cols-3 w-full gap-1 sm:gap-2 mt-4 sm:mt-5 py-3 border-y border-dashed border-[#D4C9B6]">
+                            <div className="text-center"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.ongoing}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Ongoing</p></div>
+                            <div className="text-center border-l border-dashed border-[#D4C9B6]"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.hacks}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Hacks</p></div>
+                            <div className="text-center border-l border-dashed border-[#D4C9B6]"><p className="text-base sm:text-lg font-bold text-primary leading-none">{member.papers}</p><p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide mt-1">Papers</p></div>
+                          </div>
+                          <div className="w-full mt-4">
+                            <Button variant="default" className="w-full rounded-xl text-xs font-semibold bg-primary hover:bg-primary/90 text-white shadow-sm h-9" onClick={() => { setSelectedEnrollment(member.enrollment_no); setShowGrid(false); }}>
+                              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit Profile
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button variant="outline" size="sm" className="rounded-lg border-[#D4C9B6]" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
+                  <span className="text-sm text-muted-foreground font-medium">Page {page} of {totalPages}</span>
+                  <Button variant="outline" size="sm" className="rounded-lg border-[#D4C9B6]" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>

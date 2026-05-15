@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useState, useEffect, useMemo } from "react";
 import ImageUpload from "@/components/ImageUpload";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Plus, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2, Users } from "lucide-react";
+import { Search, Plus, Loader2, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
+import BatchTabs from "@/components/BatchTabs";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { useServerEvent } from "@/hooks/useServerEvents";
 
 interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; profile_image?: string; }
 
-const TABS = [{ l: "All Batches", v: "" }, { l: "Batch 2024–2028", v: "2024-2028" }, { l: "Batch 2023–2027", v: "2023-2027" }, { l: "Batch 2022–2026", v: "2022-2026" }];
 const PG = 10;
 const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
 const mb = (t?: string) => { const s = (t || "").toLowerCase(); if (s.includes("head")) return { bg: "#dcf0e6", c: "#1a5c3a", b: "#a8d8bc", d: "#2e8a58" }; if (s.includes("peer")) return { bg: "#fde8f3", c: "#8f2557", b: "#f4b8d8", d: "#c94080" }; return { bg: "#f0eee8", c: "#5a5248", b: "#d8d4cc", d: "#8a8278" }; };
@@ -32,10 +33,11 @@ function FormFields({
 }) {
   const fields: [string, string, string, string?][] = [
     ["Email *", "email", "student@example.com", "email"],
-    ["Contact", "contact_no", "+91 98765"],
     ["Institute", "institute_name", "KSV University"],
     ["Department", "department", "CE"],
   ];
+  const fieldsBefore = fields.slice(0, 1);   // Email
+  const fieldsAfter  = fields.slice(1);       // Institute, Department
 
   return (
     <div className="space-y-5 pt-2">
@@ -77,7 +79,7 @@ function FormFields({
               placeholder="24BECE30001"
               className="rounded-xl border-[#d8d2c6] bg-white h-11 font-mono text-sm tracking-wide text-[#1a1810]"
               value={data.enrollment_no}
-              onChange={e => set({ ...data, enrollment_no: e.target.value })}
+              onChange={e => set({ ...data, enrollment_no: e.target.value.toUpperCase() })}
             />
           </div>
         </div>
@@ -85,16 +87,20 @@ function FormFields({
 
       {/* Remaining fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {fields.map(([l, k, p, t]) => (
+        {fieldsBefore.map(([l, k, p, t]) => (
           <div key={k} className="space-y-1">
             <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>
-            <Input
-              type={t || "text"}
-              placeholder={p}
-              className="rounded-xl"
-              value={(data as any)[k]}
-              onChange={e => set({ ...data, [k]: e.target.value })}
-            />
+            <Input type={t || "text"} placeholder={p} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} />
+          </div>
+        ))}
+        <div className="space-y-1">
+          <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>Contact</Label>
+          <Input type="tel" placeholder="9876543210" className="rounded-xl" value={data.contact_no} maxLength={10} onChange={e => set({ ...data, contact_no: e.target.value.replace(/\D/g, "").slice(0, 10) })} />
+        </div>
+        {fieldsAfter.map(([l, k, p, t]) => (
+          <div key={k} className="space-y-1">
+            <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>
+            <Input type={t || "text"} placeholder={p} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} />
           </div>
         ))}
       </div>
@@ -153,22 +159,52 @@ export default function Students() {
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
 
-  useEffect(() => { load(); }, []);
-  const load = async () => { try { setLoading(true); const r = await adminAPI.getStudents(); setStudents(parseList(r)); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } finally { setLoading(false); } };
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    try {
+      if (!opts?.silent) setLoading(true);
+      const r = await adminAPI.getStudents();
+      setStudents(parseList(r));
+    } catch (e: any) {
+      if (!opts?.silent) {
+        toast({ variant: "destructive", title: "Error", description: e.message });
+      }
+    } finally {
+      if (!opts?.silent) setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useServerEvent("student_changed", () => {
+    load({ silent: true });
+  });
 
   const sorted = useMemo(() => [...students].sort((a, b) => { const isMaster = (s: Student) => (s.batch?.toLowerCase().includes("master")) || (s.enrollment_no?.toUpperCase().includes("ME")) || (s.student_name?.toLowerCase().includes("ghetiya poojan")); const aM = isMaster(a) ? 1 : 0, bM = isMaster(b) ? 1 : 0; if (aM !== bM) return aM - bM; const x = (a.batch || "").toUpperCase(), y = (b.batch || "").toUpperCase(); return y < x ? -1 : y > x ? 1 : (a.student_name || "").localeCompare(b.student_name || ""); }), [students]);
+  const batches = useMemo(() => { const seen = new Set<string>(); const result: string[] = []; for (const s of sorted) { const b = (s.batch || "").trim(); if (b && !seen.has(b)) { seen.add(b); result.push(b); } } return result.sort((a, b) => b.localeCompare(a)); }, [sorted]);
   const filtered = useMemo(() => sorted.filter(s => { const q = search.toLowerCase(); return (!q || [s.student_name, s.enrollment_no, s.email, s.department, s.batch].some(v => v?.toLowerCase().includes(q))) && (!batchFilter || s.batch === batchFilter); }), [sorted, search, batchFilter]);
   const pages = Math.max(1, Math.ceil(filtered.length / PG));
   const paged = filtered.slice((page - 1) * PG, page * PG);
   const allSel = paged.length > 0 && paged.every(s => sel.has(s.enrollment_no));
 
   const onBatch = (v: string) => { setBatchFilter(v); setPage(1); setSel(new Set()); };
+  useEffect(() => { if (batchFilter && !batches.includes(batchFilter)) setBatchFilter(""); }, [batches, batchFilter]);
   const onSearch = (v: string) => { setSearch(v); setPage(1); setSel(new Set()); };
   const toggleSel = (id: string) => { const s = new Set(sel); s.has(id) ? s.delete(id) : s.add(id); setSel(s); };
   const toggleAll = () => { if (allSel) { const s = new Set(sel); paged.forEach(st => s.delete(st.enrollment_no)); setSel(s); } else { const s = new Set(sel); paged.forEach(st => s.add(st.enrollment_no)); setSel(s); } };
   const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "General Members", profile_image: s.profile_image || "" }); };
 
-  const handleAdd = async () => { if (!canEdit || !form.student_name || !form.enrollment_no || !form.email) { toast({ variant: "destructive", title: "Fill required fields" }); return; } try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
+  const handleAdd = async () => {
+    if (!canEdit) return;
+    const errs: string[] = [];
+    if (!form.student_name.trim()) errs.push("Student name is required.");
+    if (!form.enrollment_no.trim()) errs.push("Enrollment number is required.");
+    else if (/\s/.test(form.enrollment_no)) errs.push("Enrollment number must not contain spaces.");
+    if (!form.email.trim()) errs.push("Email is required.");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.push("Enter a valid email address.");
+    if (errs.length) { toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") }); return; }
+    try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r) { setEditSt(null); toast({ title: "Student updated" }); load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleDel = async (s: Student) => { if (!canEdit) return; try { await adminAPI.deleteStudent(s.enrollment_no); setStudents(p => p.filter(x => x.id !== s.id)); setSel(prev => { const n = new Set(prev); n.delete(s.enrollment_no); return n; }); toast({ title: "Student removed" }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleBulkDel = async () => { if (!canEdit) return; const rm = students.filter(s => sel.has(s.enrollment_no)); try { await Promise.all(rm.map(s => adminAPI.deleteStudent(s.enrollment_no))); setStudents(p => p.filter(s => !sel.has(s.enrollment_no))); setSel(new Set()); toast({ title: `${rm.length} students removed` }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
@@ -229,10 +265,8 @@ export default function Students() {
         </DialogContent>
       </Dialog>
 
-      {/* Batch Tabs */}
-      <div style={{ display: "inline-flex", gap: 5, padding: 6, borderRadius: 50, background: "linear-gradient(135deg,#eae6dc,#f2ede4)", marginBottom: 24, boxShadow: "inset 0 1.5px 4px rgba(0,0,0,0.08)", border: "1px solid #d8d2c6" }}>
-        {TABS.map(t => { const a = batchFilter === t.v; return (<button key={t.v} onClick={() => onBatch(t.v)} style={{ padding: "8px 20px", borderRadius: 50, border: "none", cursor: "pointer", fontSize: "0.835rem", fontWeight: a ? 700 : 500, background: a ? GRN : "transparent", color: a ? "#fff" : "#8a7e72", boxShadow: a ? "0 3px 12px rgba(26,74,52,0.3)" : "none", transition: "all 0.2s" }}>{t.l}</button>); })}
-      </div>
+      {/* Batch Tabs — dynamic slider with arrow navigation */}
+      <BatchTabs batches={batches} selected={batchFilter} onSelect={onBatch} />
 
       {loading && <div style={{ display: "flex", justifyContent: "center", padding: "4rem 0" }}><Loader2 style={{ width: 28, height: 28, color: "#1e4a34", animation: "spin 1s linear infinite" }} /></div>}
 
