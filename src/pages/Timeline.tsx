@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 
 interface TimelineEntry {
-  id: number;
+  id: string | number;
   serial_no: number;
   title: string;
   description?: string;
@@ -43,6 +43,7 @@ interface TimelineEntry {
 const todayStr = new Date().toISOString().split("T")[0];
 const isValidUrl = (url: string) =>
   !url || /^(https?:\/\/)?(([\w-]+\.)+[\w-]{2,})(\/[\w\-./?%&=#]*)?$/i.test(url);
+const toTimelineStep = (date: string) => format(new Date(date), "MMM yyyy");
 
 export default function Timeline() {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
@@ -85,7 +86,36 @@ export default function Timeline() {
       const response = await adminAPI.getTimeline();
 
       const list = parseList(response);
-      const sorted = list.sort((a: any, b: any) => (a.serial_no || 0) - (b.serial_no || 0));
+      const normalized = (list || []).map((item: any, idx: number) => {
+        if (item && (item.step !== undefined || item.display_order !== undefined)) {
+          let session_date: string | undefined = undefined;
+          if (item.step) {
+            const monthYearMatch = String(item.step).match(/([A-Za-z]+)\s*(\d{4})/);
+            if (monthYearMatch) {
+              const parsed = new Date(`${monthYearMatch[1]} 1, ${monthYearMatch[2]}`);
+              if (!isNaN(parsed.getTime())) session_date = parsed.toISOString();
+            }
+          }
+
+          return {
+            id: item.id ? String(item.id) : String(idx + 1),
+            serial_no: item.display_order || idx + 1,
+            title: item.title || `Step ${idx + 1}`,
+            description: item.description || "",
+            session_date: session_date || "",
+            category: item.is_active === false ? "inactive" : "timeline",
+            type: "timeline",
+            linkedin_url: "",
+            image_url: item.icon_svg || "",
+            media_urls: [],
+            created_at: item.created_at || "",
+          } as TimelineEntry;
+        }
+
+        return item as TimelineEntry;
+      });
+
+      const sorted = normalized.sort((a: any, b: any) => (a.serial_no || 0) - (b.serial_no || 0));
       setEntries(sorted as TimelineEntry[]);
     } catch (error: any) {
       toast({
@@ -122,14 +152,11 @@ export default function Timeline() {
     try {
       setSubmitting(true);
       const response = await adminAPI.createTimelineEntry({
+        step: toTimelineStep(formData.session_date),
         title: formData.title.trim(),
         description: formData.description.trim() || null,
-
-        session_date: formData.session_date || null,
-        category: formData.category.trim() || null,
-        type: formData.type || "video",
-        linkedin_url: formData.linkedin_url.trim() || null,
-        image_url: formData.image_url.trim() || null,
+        icon_svg: formData.image_url.trim() || null,
+        is_active: formData.category.trim().toLowerCase() !== "inactive",
       });
 
       if (response) {
@@ -247,14 +274,11 @@ export default function Timeline() {
     try {
       setEditSubmitting(true);
       const response = await adminAPI.updateTimelineEntry(String(editingEntry.id), {
+        step: toTimelineStep(editFormData.session_date),
         title: editFormData.title.trim(),
         description: editFormData.description.trim() || null,
-
-        session_date: editFormData.session_date || null,
-        category: editFormData.category.trim() || null,
-        type: editFormData.type || "video",
-        linkedin_url: editFormData.linkedin_url.trim() || null,
-        image_url: editFormData.image_url.trim() || null,
+        icon_svg: editFormData.image_url.trim() || null,
+        is_active: editFormData.category.trim().toLowerCase() !== "inactive",
       });
 
       if (response) {
