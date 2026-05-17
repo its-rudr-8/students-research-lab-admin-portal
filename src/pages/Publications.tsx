@@ -133,6 +133,8 @@ export default function Publications() {
   // Conference Venue is required only when publication type is "conference"
   const isConferenceVenueRequired = formData.type_of_publication === "conference";
   const isEditConferenceVenueRequired = editFormData.type_of_publication === "conference";
+  const isPosterPresentedOnRequired = formData.type_of_publication === "poster";
+  const isEditPosterPresentedOnRequired = editFormData.type_of_publication === "poster";
 
   // Published Date must be today or in the past
   const today = new Date();
@@ -376,6 +378,19 @@ export default function Publications() {
       }
     }
 
+    if (isPosterPresentedOnRequired) {
+      if (!formData.conference_date) {
+        toast({ variant: "destructive", title: "Missing required fields", description: "Presented On is required for Poster publications." });
+        return;
+      }
+      const pickedPresentedOn = new Date(formData.conference_date);
+      pickedPresentedOn.setHours(0, 0, 0, 0);
+      if (pickedPresentedOn > today) {
+        toast({ variant: "destructive", title: "Invalid date", description: "Presented On cannot be a future date." });
+        return;
+      }
+    }
+
     if (isConferenceVenueRequired && !formData.venue.trim()) {
       toast({ variant: "destructive", title: "Missing required fields", description: "Conference Venue is required." });
       return;
@@ -393,6 +408,11 @@ export default function Publications() {
 
     if (isPublisherRequired && !formData.publisher.trim()) {
       toast({ variant: "destructive", title: "Missing required fields", description: "Publisher is required." });
+      return;
+    }
+
+    if (showOtherFields && !customPublisher.trim()) {
+      toast({ variant: "destructive", title: "Missing required fields", description: "Publisher Name is required for Other publishers." });
       return;
     }
 
@@ -426,16 +446,17 @@ export default function Publications() {
         type_of_publication: formData.type_of_publication.trim(),
         link_to_paper: normalizedLink || undefined,
       };
+      const resolvedPublisher = showOtherFields ? customPublisher.trim() : formData.publisher.trim();
 
       if (formData.conference_date) payload.conference_date = formData.conference_date;
-      if (formData.publisher.trim()) payload.publisher = formData.publisher.trim();
+      if (resolvedPublisher) payload.publisher = resolvedPublisher;
       if (formData.department.trim()) payload.department = formData.department.trim();
       if (formData.institute.trim()) payload.institute = formData.institute.trim();
       if (formData.venue.trim()) payload.venue = formData.venue.trim();
       if (formData.description.trim()) payload.description = formData.description.trim();
       if (formData.category.trim()) payload.category = formData.category.trim();
       // Only attach publisher_logo_id when publisher is also being sent
-      if (publisherLogoId !== null && formData.publisher.trim()) payload.publisher_logo_id = publisherLogoId;
+      if (publisherLogoId !== null && resolvedPublisher) payload.publisher_logo_id = publisherLogoId;
 
       // Create as PENDING first — the backend approve endpoint handles setting APPROVED status
       const createResponse = await adminAPI.createPublication(payload);
@@ -564,8 +585,26 @@ export default function Publications() {
       }
     }
 
+    if (isEditPosterPresentedOnRequired) {
+      if (!editFormData.conference_date) {
+        toast({ variant: "destructive", title: "Missing required fields", description: "Presented On is required for Poster publications." });
+        return;
+      }
+      const pickedPresentedOn = new Date(editFormData.conference_date);
+      pickedPresentedOn.setHours(0, 0, 0, 0);
+      if (pickedPresentedOn > today) {
+        toast({ variant: "destructive", title: "Invalid date", description: "Presented On cannot be a future date." });
+        return;
+      }
+    }
+
     if (isEditPublisherRequired && !editFormData.publisher.trim()) {
       toast({ variant: "destructive", title: "Missing required fields", description: "Publisher is required." });
+      return;
+    }
+
+    if (showOtherFields && !customPublisher.trim()) {
+      toast({ variant: "destructive", title: "Missing required fields", description: "Publisher Name is required for Other publishers." });
       return;
     }
 
@@ -582,7 +621,7 @@ export default function Publications() {
         published_date: editPublishedDate,
         conference_date: editFormData.conference_date || null,
         type_of_publication: editFormData.type_of_publication.trim() || null,
-        publisher: editFormData.publisher.trim() || null,
+        publisher: showOtherFields ? customPublisher.trim() || null : editFormData.publisher.trim() || null,
         department: editFormData.department.trim() || null,
         institute: editFormData.institute.trim() || null,
         link_to_paper: normalizedEditLink || null,
@@ -720,10 +759,10 @@ export default function Publications() {
                     onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
                   />
                 </div>
-                {isConferenceVenueRequired && (
+                {(isConferenceVenueRequired || isPosterPresentedOnRequired) && (
                   <div className="space-y-2">
                     <Label className="text-[#8B735B] font-bold">
-                      Conference Date <span className="text-red-500">*</span>
+                      {isPosterPresentedOnRequired ? "Presented On" : "Conference Date"} <span className="text-red-500">*</span>
                     </Label>
                     <Popover open={addConferenceDateOpen} onOpenChange={setAddConferenceDateOpen}>
                       <PopoverTrigger asChild>
@@ -1335,9 +1374,11 @@ export default function Publications() {
                   onChange={(e) => setEditFormData({ ...editFormData, venue: e.target.value })}
                 />
               </div>
-              {editFormData.type_of_publication === "conference" && (
+              {(editFormData.type_of_publication === "conference" || isEditPosterPresentedOnRequired) && (
                 <div className="space-y-2">
-                  <Label className="text-[#8B735B] font-bold">Conference Date</Label>
+                  <Label className="text-[#8B735B] font-bold">
+                    {isEditPosterPresentedOnRequired ? "Presented On" : "Conference Date"}{isEditPosterPresentedOnRequired && <span className="text-red-500 ml-0.5">*</span>}
+                  </Label>
                   <Popover open={editConferenceDateOpen} onOpenChange={setEditConferenceDateOpen}>
                     <PopoverTrigger asChild>
                       <Button
@@ -1359,6 +1400,7 @@ export default function Publications() {
                           setEditFormData({ ...editFormData, conference_date: date ? format(date, "yyyy-MM-dd") : "" });
                           setEditConferenceDateOpen(false);
                         }}
+                        disabled={disableFutureDates}
                         initialFocus
                         className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-2xl scale-90 origin-top-left shadow-xl"
                         classNames={{
