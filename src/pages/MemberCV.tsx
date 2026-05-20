@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 import { useToast } from "@/hooks/use-toast";
@@ -32,11 +33,25 @@ type MemberRecord = {
 
 
 
+type ResearchPaper = {
+  link: string;
+  title: string;
+  status: "ongoing" | "completed" | "published";
+};
+
+type Patent = {
+  patent_id?: number;
+  patent_title: string;
+  application_date: string;
+  application_status: "Filed" | "Under Review" | "Published" | "Granted" | "Rejected";
+  application_number: string;
+};
+
 type CVFormData = {
   // identity
   student_name: string;
   linkedin_id: string;
-  semester: string;
+  batch: string;
   department: string;
   institute: string;
   organization: string;
@@ -46,18 +61,20 @@ type CVFormData = {
   research_areas: string;
   research_work: string;
   hackathons: string;
-  research_papers: string;
+  research_papers: ResearchPaper[]; // Changed to JSON array format
   leadership: string;
   awards: string;
   certifications: string;
   additional_achievements: string;
   internships: string;
+  branch: string; // Added branch field
+  patents: Patent[]; // Added patents array
 };
 
 const emptyFormData = (): CVFormData => ({
   student_name: "",
   linkedin_id: "",
-  semester: "",
+  batch: "",
   department: "",
   institute: "",
   organization: "",
@@ -66,12 +83,14 @@ const emptyFormData = (): CVFormData => ({
   research_areas: "",
   research_work: "",
   hackathons: "",
-  research_papers: "",
+  research_papers: [],
   leadership: "",
   awards: "",
   certifications: "",
   additional_achievements: "",
   internships: "",
+  branch: "",
+  patents: [],
 });
 
 // Convert a string[] from the API to newline-separated textarea string
@@ -81,6 +100,42 @@ const arrToText = (arr: unknown): string =>
 // Convert a textarea string back to a string[]
 const textToArr = (s: string): string[] =>
   s.split("\n").map((l) => l.trim()).filter(Boolean);
+
+// Parse research papers from API (could be array of objects or array of strings)
+const parseResearchPapers = (data: unknown): ResearchPaper[] => {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item) => {
+      if (typeof item === "object" && item !== null && "title" in item) {
+        return {
+          title: (item as any).title || "",
+          link: (item as any).link || "",
+          status: (item as any).status || "completed",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as ResearchPaper[];
+};
+
+// Parse patents from API
+const parsePatents = (data: unknown): Patent[] => {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((item) => {
+      if (typeof item === "object" && item !== null) {
+        return {
+          patent_id: (item as any).patent_id,
+          patent_title: (item as any).patent_title || "",
+          application_date: (item as any).application_date || "",
+          application_status: (item as any).application_status || "Filed",
+          application_number: (item as any).application_number || "",
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as Patent[];
+};
 
 
 
@@ -228,7 +283,7 @@ export default function MemberCV() {
         setFormData({
           student_name: String(d.student_name || ""),
           linkedin_id: String(d.linkedin_id || ""),
-          semester: d.semester != null ? String(d.semester) : "",
+          batch: String(d.batch || selectedMember?.batch || ""),
           department: String(d.department || ""),
           institute: String(d.institute || ""),
           organization: String(d.organization || ""),
@@ -237,12 +292,14 @@ export default function MemberCV() {
           research_areas: arrToText(d.research_areas),
           research_work: arrToText(d.research_work),
           hackathons: arrToText(d.hackathons),
-          research_papers: arrToText(d.research_papers),
+          research_papers: parseResearchPapers(d.research_papers),
           leadership: arrToText(d.leadership),
           awards: arrToText(d.awards),
           certifications: arrToText(d.certifications),
           additional_achievements: arrToText(d.additional_achievements),
           internships: arrToText(d.internships),
+          branch: String(d.branch || ""),
+          patents: parsePatents(d.patents),
         });
       } catch (error: any) {
         toast({
@@ -255,7 +312,7 @@ export default function MemberCV() {
       }
     };
     fetchProfile();
-  }, [selectedEnrollment]);
+  }, [selectedEnrollment, selectedMember?.batch]);
 
   const canEditSelected = !!selectedEnrollment && (!!isAdmin || (currentUser?.enrollmentNo && currentUser.enrollmentNo === selectedEnrollment));
 
@@ -266,26 +323,27 @@ export default function MemberCV() {
       return toast({ variant: "destructive", title: "Permission denied", description: "You can edit only your own profile." });
     try {
       setSaving(true);
-      const semInt = parseInt(formData.semester, 10);
       const payload = {
         enrollment_no: selectedEnrollment,
         student_name: formData.student_name || selectedMember.student_name,
         linkedin_id: formData.linkedin_id,
-        semester: isNaN(semInt) ? undefined : semInt,
+        batch: formData.batch || selectedMember.batch || "",
         department: formData.department,
         institute: formData.institute,
         organization: formData.organization,
         reflection: formData.reflection,
         profile_image: formData.profile_image,
+        branch: formData.branch,
         research_areas: textToArr(formData.research_areas),
         research_work: textToArr(formData.research_work),
         hackathons: textToArr(formData.hackathons),
-        research_papers: textToArr(formData.research_papers),
+        research_papers: formData.research_papers, // Now sending as JSON array
         leadership: textToArr(formData.leadership),
         awards: textToArr(formData.awards),
         certifications: textToArr(formData.certifications),
         additional_achievements: textToArr(formData.additional_achievements),
         internships: textToArr(formData.internships),
+        patents: formData.patents, // Now sending as JSON array
       };
       await adminAPI.updateMemberCV(payload);
       toast({ title: "Profile saved", description: `CV updated for ${selectedMember.student_name}.` });
@@ -321,6 +379,24 @@ export default function MemberCV() {
     }
     return result.sort((a, b) => b.localeCompare(a));
   }, [sortedMembers]);
+
+  const batchOptions = useMemo(() => {
+    const fixedOptions = [
+      "2024",
+      "2025",
+      "2026",
+      "2027",
+      "2028",
+      "2029",
+      "2030",
+    ];
+
+    const current = [selectedMember?.batch, formData.batch, ...batches]
+      .map((value) => (value || "").trim())
+      .filter(Boolean);
+
+    return Array.from(new Set([...fixedOptions, ...current]));
+  }, [batches, formData.batch, selectedMember?.batch]);
 
   const filteredMembers = useMemo(() => {
     const q = search.toLowerCase();
@@ -466,19 +542,35 @@ export default function MemberCV() {
                 <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">LinkedIn URL</Label>
                 <Input value={formData.linkedin_id} onChange={(e) => setFormData(p => ({ ...p, linkedin_id: e.target.value }))} placeholder="https://linkedin.com/in/..." className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Semester</Label>
-                  <Input type="number" min={1} max={8} value={formData.semester} onChange={(e) => setFormData(p => ({ ...p, semester: e.target.value }))} placeholder="6" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Dept</Label>
-                  <Input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="CE" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Institute</Label>
-                  <Input value={formData.institute} onChange={(e) => setFormData(p => ({ ...p, institute: e.target.value }))} placeholder="CHARUSAT" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Branch</Label>
+                <Input value={formData.branch} onChange={(e) => setFormData(p => ({ ...p, branch: e.target.value }))} placeholder="Computer Science" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Batch</Label>
+                <Select value={formData.batch} onValueChange={(value) => setFormData((p) => ({ ...p, batch: value }))} disabled={!canEditSelected}>
+                  <SelectTrigger className="bg-white border-[#D4C9B6] rounded-xl">
+                    <SelectValue placeholder="Select batch" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border-[#D4C9B6]">
+                    {batchOptions.map((batch) => (
+                      <SelectItem key={batch} value={batch}>
+                        Batch {batch}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Dept</Label>
+                <Input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="CE" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Institute</Label>
+                <Input value={formData.institute} onChange={(e) => setFormData(p => ({ ...p, institute: e.target.value }))} placeholder="LDRP-ITR" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
               </div>
             </div>
 
@@ -492,7 +584,91 @@ export default function MemberCV() {
 
             <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🔬 Research Areas" field="research_areas" placeholder="Cloud Computing Optimization&#10;Microservices Architecture" hint="One per line" />
             <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📁 Research Work" field="research_work" placeholder="Ongoing Research Paper: NLP Study&#10;Completed: Smart Parking System" hint="Prefix with 'Ongoing' for badge · one per line" />
-            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📄 Research Papers Published" field="research_papers" placeholder="Paper Title, Journal Name, 2024" hint="One per line" />
+            
+            {/* Research Papers Section with JSON format */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-[#1a1810]">📄 Research Papers Published</h3>
+                <span className="text-[11px] text-muted-foreground italic">Title, Link, Status</span>
+              </div>
+              <div className="space-y-3 bg-white/50 p-4 rounded-xl border border-[#D4C9B6]">
+                {formData.research_papers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No research papers added yet</p>
+                ) : (
+                  formData.research_papers.map((paper, idx) => (
+                    <div key={idx} className="p-4 bg-white border border-[#D4C9B6] rounded-lg space-y-2">
+                      <Input
+                        placeholder="Paper Title"
+                        value={paper.title}
+                        onChange={(e) => {
+                          const updated = [...formData.research_papers];
+                          updated[idx].title = e.target.value;
+                          setFormData({ ...formData, research_papers: updated });
+                        }}
+                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                        disabled={!canEditSelected}
+                      />
+                      <Input
+                        placeholder="Paper Link (https://...)"
+                        value={paper.link}
+                        onChange={(e) => {
+                          const updated = [...formData.research_papers];
+                          updated[idx].link = e.target.value;
+                          setFormData({ ...formData, research_papers: updated });
+                        }}
+                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                        disabled={!canEditSelected}
+                      />
+                      <div className="flex gap-2">
+                        <select
+                          value={paper.status}
+                          onChange={(e) => {
+                            const updated = [...formData.research_papers];
+                            updated[idx].status = e.target.value as any;
+                            setFormData({ ...formData, research_papers: updated });
+                          }}
+                          className="flex-1 px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
+                          disabled={!canEditSelected}
+                        >
+                          <option value="ongoing">Ongoing</option>
+                          <option value="completed">Completed</option>
+                          <option value="published">Published</option>
+                        </select>
+                        {canEditSelected && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:bg-red-50"
+                            onClick={() => {
+                              const updated = formData.research_papers.filter((_, i) => i !== idx);
+                              setFormData({ ...formData, research_papers: updated });
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {canEditSelected && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-[#D4C9B6] text-[#1a1810]"
+                    onClick={() => {
+                      setFormData({
+                        ...formData,
+                        research_papers: [...formData.research_papers, { title: "", link: "", status: "ongoing" }],
+                      });
+                    }}
+                  >
+                    + Add Research Paper
+                  </Button>
+                )}
+              </div>
+            </div>
+
             <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🏆 Hackathons" field="hackathons" placeholder="Smart India Hackathon 2024 - Runner Up" hint="One per line" />
 
             <div className="border-t border-dashed border-[#D4C9B6]" />
@@ -506,9 +682,109 @@ export default function MemberCV() {
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="💼 Internships" field="internships" placeholder="Software Intern, XYZ Corp, Summer 2024" hint="One per line" />
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="⭐ Additional Achievements" field="additional_achievements" placeholder="Published article in campus newsletter" hint="One per line" />
             </div>
+
+            <div className="border-t border-dashed border-[#D4C9B6]" />
+
+            {/* Patents Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-[#1a1810]">⚖️ Patents</h3>
+                <span className="text-[11px] text-muted-foreground italic">Title, Application Date, Status</span>
+              </div>
+              <div className="space-y-3 bg-white/50 p-4 rounded-xl border border-[#D4C9B6]">
+                {formData.patents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No patents added yet</p>
+                ) : (
+                  formData.patents.map((patent, idx) => (
+                    <div key={idx} className="p-4 bg-white border border-[#D4C9B6] rounded-lg space-y-2">
+                      <Input
+                        placeholder="Patent Title"
+                        value={patent.patent_title}
+                        onChange={(e) => {
+                          const updated = [...formData.patents];
+                          updated[idx].patent_title = e.target.value;
+                          setFormData({ ...formData, patents: updated });
+                        }}
+                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                        disabled={!canEditSelected}
+                      />
+                      <Input
+                        placeholder="Application Number"
+                        value={patent.application_number}
+                        onChange={(e) => {
+                          const updated = [...formData.patents];
+                          updated[idx].application_number = e.target.value;
+                          setFormData({ ...formData, patents: updated });
+                        }}
+                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                        disabled={!canEditSelected}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <Input
+                          placeholder="Application Date (YYYY-MM-DD)"
+                          type="date"
+                          value={patent.application_date}
+                          onChange={(e) => {
+                            const updated = [...formData.patents];
+                            updated[idx].application_date = e.target.value;
+                            setFormData({ ...formData, patents: updated });
+                          }}
+                          className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                          disabled={!canEditSelected}
+                        />
+                        <select
+                          value={patent.application_status}
+                          onChange={(e) => {
+                            const updated = [...formData.patents];
+                            updated[idx].application_status = e.target.value as any;
+                            setFormData({ ...formData, patents: updated });
+                          }}
+                          className="px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
+                          disabled={!canEditSelected}
+                        >
+                          <option value="Filed">Filed</option>
+                          <option value="Under Review">Under Review</option>
+                          <option value="Published">Published</option>
+                          <option value="Granted">Granted</option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+                      </div>
+                      {canEditSelected && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-red-500 hover:bg-red-50"
+                          onClick={() => {
+                            const updated = formData.patents.filter((_, i) => i !== idx);
+                            setFormData({ ...formData, patents: updated });
+                          }}
+                        >
+                          Delete Patent
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
+                {canEditSelected && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-[#D4C9B6] text-[#1a1810]"
+                    onClick={() => {
+                      setFormData({
+                        ...formData,
+                        patents: [...formData.patents, { patent_title: "", application_date: "", application_status: "Filed", application_number: "" }],
+                      });
+                    }}
+                  >
+                    + Add Patent
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
           
-          <div className="bg-[#DAEBE1] rounded-[24px] p-6 sm:p-8 mt-6 border border-[#a8dbc0] shadow-sm relative overflow-hidden">
+            <div className="bg-[#DAEBE1] rounded-[24px] p-6 sm:p-8 mt-6 border border-[#a8dbc0] shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/40 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
             <h3 className="text-[#21493A] font-bold text-lg mb-6 relative z-10">5. Execution Analytics</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
@@ -529,7 +805,7 @@ export default function MemberCV() {
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0"><FileText className="w-6 h-6 text-blue-500" /></div>
                 <div>
-                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_papers.split("\n").filter(l => l.trim()).length}</p>
+                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_papers.length}</p>
                   <p className="text-sm font-medium text-[#2A5D4B]/80 mt-1">Research Published</p>
                 </div>
               </div>
