@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { clearSession, getStoredUser, hasWriteAccess } from "@/lib/auth";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import ConfirmProvider from "@/components/ConfirmProvider";
 import { useServerEventsConnection } from "@/hooks/useServerEvents";
 
 const allNavItems = [
@@ -119,7 +120,8 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="relative flex min-h-dvh w-full overflow-hidden bg-background">
+    <ConfirmProvider>
+      <div className="relative flex min-h-dvh w-full bg-background">
       {/* Mobile overlay when sidebar is open */}
       <AnimatePresence>
         {sidebarOpen && !isDesktop && (
@@ -138,7 +140,7 @@ export default function AdminLayout() {
         initial={false}
         animate={{ width: isDesktop ? (sidebarOpen ? 260 : 72) : sidebarOpen ? 260 : 0 }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        className="flex flex-col border-r border-border bg-sidebar h-full shrink-0 z-30 fixed top-0 left-0 lg:static"
+        className={`flex flex-col border-r border-border bg-sidebar h-screen shrink-0 z-30 ${isDesktop ? "sticky top-0 self-start" : "fixed top-0 left-0"}`}
       >
         {/* Logo */}
         <NavLink to="/" end className="flex items-center gap-3 px-4 h-16 border-b border-border shrink-0">
@@ -220,7 +222,7 @@ export default function AdminLayout() {
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0 relative z-10">
         {/* Header */}
-        <header className="flex items-center justify-between h-14 sm:h-16 px-3 sm:px-6 border-b border-border/70 bg-card/65 backdrop-blur-md shrink-0 gap-2 sm:gap-3">
+        <header className="sticky top-0 z-20 flex items-center justify-between h-14 sm:h-16 px-3 sm:px-6 border-b border-border/70 bg-card/65 backdrop-blur-md shrink-0 gap-2 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
             <Button
               variant="ghost"
@@ -247,7 +249,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Page content */}
-        <main data-scroll-container="app-main" className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3">
+        <main data-scroll-container="app-main" className="flex-1 overflow-x-hidden p-2 sm:p-3">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
@@ -259,6 +261,7 @@ export default function AdminLayout() {
         </main>
         <ScrollToTopButton />
       </div>
-    </div>
+      </div>
+    </ConfirmProvider>
   );
 }

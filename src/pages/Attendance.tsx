@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, X, Calendar as CalendarIcon } from "lucide-react";
+import { Check, X, Calendar as CalendarIcon, Pencil } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { motion } from "framer-motion";
 import StudentAvatar from "@/components/StudentAvatar";
@@ -15,13 +15,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 // Helper function to safely format dates
 const formatDateToISO = (date: any): string | null => {
@@ -42,7 +38,7 @@ const formatDateToISO = (date: any): string | null => {
 };
 
 export default function Attendance() {
-  const [students, setStudents] = useState<Array<{ enrollment_no: string; name: string; initials: string; hours: number; profile_image?: string }>>([]);
+  const [students, setStudents] = useState<Array<{ id: number; enrollment_no: string; name: string; initials: string; hours: number; attendance: number; profile_image?: string }>>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchName, setSearchName] = useState("");
   const itemsPerPage = 10;
@@ -57,6 +53,11 @@ export default function Attendance() {
   const [cachedAttendanceData, setCachedAttendanceData] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<{ id: number; enrollment_no: string; name: string; hours: number; attendance: number } | null>(null);
+  const [editHours, setEditHours] = useState("0");
+  const [editAttendance, setEditAttendance] = useState("0");
+  const [updatingAttendance, setUpdatingAttendance] = useState(false);
   const canEdit = hasWriteAccess();
   const currentUser = getStoredUser();
   const ownEnrollment = String(currentUser?.enrollmentNo || "").trim();
@@ -135,11 +136,13 @@ export default function Attendance() {
         .map((row: any) => {
           const details = stuMap[row.enrollment_no];
           return {
+            id: Number(row.id),
             enrollment_no: row.enrollment_no,
             name: details ? details.name : row.enrollment_no,
             initials: details ? details.initials : row.enrollment_no.slice(0, 2).toUpperCase(),
             profile_image: details?.profile_image,
-            hours: row.hours,
+            hours: Number(row.hours || 0),
+            attendance: Number(row.attendance || 0),
           };
         });
       setStudents(studentsList);
@@ -205,6 +208,57 @@ export default function Attendance() {
       setAddError(error.message || "Failed to add attendance");
     }
     setAdding(false);
+  };
+
+  const handleOpenEdit = (student: { id: number; enrollment_no: string; name: string; hours: number; attendance: number }) => {
+    setEditingStudent(student);
+    setEditHours(String(Number(student.hours || 0)));
+    setEditAttendance(String(Number(student.attendance || 0)));
+    setIsEditOpen(true);
+  };
+
+  const handleUpdateAttendance = async () => {
+    if (!editingStudent || !canEdit) return;
+    const parsedHours = Number(editHours);
+    const parsedAttendance = Number(editAttendance);
+
+    if (Number.isNaN(parsedHours) || parsedHours < 0) {
+      toast({ variant: "destructive", title: "Invalid hours", description: "Hours must be 0 or greater." });
+      return;
+    }
+    if (Number.isNaN(parsedAttendance) || parsedAttendance < 0) {
+      toast({ variant: "destructive", title: "Invalid attendance", description: "Attendance must be 0 or greater." });
+      return;
+    }
+
+    try {
+      setUpdatingAttendance(true);
+      await adminAPI.updateAttendance(String(editingStudent.id), {
+        hours: parsedHours,
+        attendance: parsedAttendance,
+      });
+
+      setCachedAttendanceData((prev) =>
+        prev.map((row: any) =>
+          Number(row.id) === editingStudent.id
+            ? { ...row, hours: parsedHours, attendance: parsedAttendance }
+            : row,
+        ),
+      );
+
+      toast({ title: "Attendance updated" });
+      setIsEditOpen(false);
+      setEditingStudent(null);
+      setRefreshKey((k) => k + 1);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: error.message || "Failed to update attendance",
+      });
+    } finally {
+      setUpdatingAttendance(false);
+    }
   };
 
   return (
@@ -329,28 +383,22 @@ export default function Attendance() {
         <h2 className="text-base sm:text-lg font-semibold text-stone-800 shrink-0">
           Attendance for
         </h2>
-        <Select
-          value={attendanceDate || ''}
-          onValueChange={(value) => setAttendanceDate(value)}
-        >
-          <SelectTrigger className="px-3 py-1.5 h-auto rounded border-2 border-[#EAD8C0] bg-[#FAF7F2] text-stone-800 text-sm font-medium w-32 sm:w-auto hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#EAD8C0]/30">
-            <SelectValue placeholder="Select Date" />
-          </SelectTrigger>
-          <SelectContent className="bg-[#FAF7F2] border-2 border-[#EAD8C0] max-h-60 overflow-y-auto">
-            {allDates.map((date, index) => {
-              const displayDate = formatDateToISO(date) || 'Invalid date';
-              return (
-                <SelectItem
-                  key={`date-${index}`}
-                  value={date}
-                  className="focus:bg-[#EAD8C0]/40 focus:text-[#8B735B] cursor-pointer text-stone-800 font-medium"
-                >
-                  {displayDate}
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
+        <div className="pt-2">
+          <Calendar
+            mode="single"
+            selected={attendanceDate ? new Date(attendanceDate) : undefined}
+            onSelect={(date) => setAttendanceDate(date ? format(date, "yyyy-MM-dd") : null)}
+            disabled={{ after: new Date() }}
+            className="bg-[#FAF7F2] border-2 border-[#EAD8C0] rounded-xl"
+            classNames={{
+              day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+              day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+              day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+              head_cell: "text-[#8B735B] font-bold",
+              cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+            }}
+          />
+        </div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col lg:flex-row gap-6">
         <div className="w-full lg:max-w-3xl flex-1">
@@ -365,6 +413,7 @@ export default function Attendance() {
                     <div className="flex-1 text-left text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Student</div>
                     <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Present</div>
                     <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Hours</div>
+                    {canEdit && <div className="w-24 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Edit</div>}
                   </div>
                   {/* Data Rows */}
                   {students.length === 0 ? (
@@ -375,7 +424,7 @@ export default function Attendance() {
                       const endIdx = startIdx + itemsPerPage;
                       const paginatedStudents = students.slice(startIdx, endIdx);
                       return paginatedStudents.map((student, i) => {
-                        const present = student.hours !== 0;
+                        const present = Number(student.attendance || 0) > 0 || Number(student.hours || 0) > 0;
                         return (
                           <motion.div key={student.enrollment_no} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="flex border-b border-[#EAD8C0]/20 last:border-0 hover:bg-[#EAD8C0]/5 transition-colors">
                             <div className="flex-1 py-2 px-2 bg-white flex items-center gap-1">
@@ -398,6 +447,19 @@ export default function Attendance() {
                             <div className="flex-1 py-2 px-2 text-center">
                               <span className="inline-block bg-[#EAD8C0]/30 px-2 py-0.5 rounded text-sm font-bold text-[#8B735B]">{Number(student.hours).toFixed(1)}</span>
                             </div>
+                            {canEdit && (
+                              <div className="w-24 py-2 px-2 text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-teal-700 hover:bg-teal-50"
+                                  onClick={() => handleOpenEdit(student)}
+                                >
+                                  <Pencil className="w-4 h-4 mr-1" />
+                                  Edit
+                                </Button>
+                              </div>
+                            )}
                           </motion.div>
                         );
                       });
@@ -451,6 +513,49 @@ export default function Attendance() {
           <img src="/Attendance.jpg" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />
         </div>
       </motion.div>
+
+      <Dialog open={isEditOpen} onOpenChange={(o) => { if (!updatingAttendance) setIsEditOpen(o); }}>
+        <DialogContent className="rounded-2xl sm:max-w-md bg-[#FAF7F2] border-[#EAD8C0]">
+          <DialogHeader>
+            <DialogTitle>Edit Attendance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-stone-700">
+              <p className="font-semibold">{editingStudent?.name}</p>
+              <p className="text-xs text-muted-foreground">{editingStudent?.enrollment_no}</p>
+              <p className="text-xs text-muted-foreground">Date: {attendanceDate || "-"}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-stone-700">Hours</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={editHours}
+                  onChange={(e) => setEditHours(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-stone-700">Attendance</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editAttendance}
+                  onChange={(e) => setEditAttendance(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={updatingAttendance}>Cancel</Button>
+              <Button onClick={handleUpdateAttendance} disabled={updatingAttendance} className="bg-teal-700 hover:bg-teal-800 text-white">
+                {updatingAttendance ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

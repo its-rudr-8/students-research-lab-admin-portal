@@ -214,6 +214,10 @@ export const adminAPI = {
     return apiCall(`/admin/scores/${enrollmentNo}`);
   },
 
+  async getSessionScores() {
+    return apiCall("/admin/session-scores");
+  },
+
   async createScore(data: any) {
     return apiCall("/admin/scores", "POST", data);
   },
@@ -441,6 +445,93 @@ export const adminAPI = {
     }
 
     return response.json();
+  },
+  
+  // Upload an XLSX for session parsing (POST /api/sessions/upload)
+  async uploadSessionXlsx(formData: FormData) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      "ngrok-skip-browser-warning": "true",
+    };
+
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (import.meta.env.DEV) headers["x-dev-token"] = "dev-bypass";
+
+    const response = await fetch(`${API_BASE_URL}/api/sessions/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("You are not logged in. Please log in again.");
+      }
+      throw new Error(err.message || `Upload failed (${response.status})`);
+    }
+
+    return response.json();
+  },
+
+  async deleteSessionScore(id: string) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      "ngrok-skip-browser-warning": "true",
+    };
+
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (import.meta.env.DEV) headers["x-dev-token"] = "dev-bypass";
+
+    const response = await fetch(`${API_BASE_URL}/api/admin/session-scores/${id}`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("You are not logged in. Please log in again.");
+      }
+      throw new Error(err.message || `Delete failed (${response.status})`);
+    }
+
+    return response.json();
+  },
+
+  async deleteSessionScoresByDateEvent(date: string, type: string) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      "ngrok-skip-browser-warning": "true",
+    };
+
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (import.meta.env.DEV) headers["x-dev-token"] = "dev-bypass";
+
+    const response = await fetch(`${API_BASE_URL}/api/admin/session-scores/event?date=${encodeURIComponent(date)}&type=${encodeURIComponent(type)}`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("You are not logged in. Please log in again.");
+      }
+      throw new Error(err.message || `Delete failed (${response.status})`);
+    }
+
+    return response.json();
+  },
+
+  async updateSessionScore(id: string, data: any) {
+    return apiCall(`/admin/session-scores/${id}`, "PUT", data);
   },
 
   async uploadImage(formData: FormData) {
