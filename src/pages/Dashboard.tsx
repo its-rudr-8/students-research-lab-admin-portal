@@ -44,6 +44,7 @@ const SHADOW = "0 6px 32px rgba(26,74,52,0.08)";
 
 function Dashboard() {
   const user = getStoredUser();
+  const isAdmin = user?.role === "admin";
   const [selectedMonth, setSelectedMonth] = useState("May");
   const [selectedYear, setSelectedYear] = useState(2026);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -311,9 +312,15 @@ function Dashboard() {
 
     const fetchImpactCounts = async () => {
       try {
+        const memberCvPromise = isAdmin
+          ? adminAPI.getAllMemberCVs().catch(() => [])
+          : user?.enrollmentNo
+          ? adminAPI.getMemberCVByEnrollment(user.enrollmentNo).catch(() => null)
+          : Promise.resolve(null);
+
         const [publicationRes, memberCvData] = await Promise.all([
           adminAPI.getPublications().catch(() => null),
-          adminAPI.getAllMemberCVs().catch(() => []),
+          memberCvPromise,
         ]);
 
         const publications = Array.isArray(publicationRes)
@@ -323,7 +330,13 @@ function Dashboard() {
           : [];
 
         const publicationCount = publications.length;
-        const memberCvProfiles = Array.isArray(memberCvData) ? memberCvData : [];
+        const memberCvProfiles = isAdmin
+          ? Array.isArray(memberCvData)
+            ? memberCvData
+            : []
+          : memberCvData
+          ? [memberCvData]
+          : [];
         const ongoingResearchCount = memberCvProfiles.reduce((sum: number, cv: any) => {
           const works = Array.isArray(cv.research_work) ? cv.research_work.filter(Boolean) : [];
           const ongoingWorks = works.filter((work: any) =>

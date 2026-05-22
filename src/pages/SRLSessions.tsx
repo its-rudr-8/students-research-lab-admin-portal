@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Loader2, Pencil, Plus, Trash2, Video, ExternalLink, Presentation, Film } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -100,6 +101,7 @@ export default function SRLSessions() {
   
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
+  const confirm = useConfirm();
 
   useEffect(() => {
     fetchSessions();
@@ -178,7 +180,8 @@ export default function SRLSessions() {
 
   const handleDeleteSession = async (id: number) => {
     if (!canEdit) return;
-    if (!confirm("Are you sure you want to delete this session?")) return;
+    const ok = await confirm({ title: "Delete session", description: "Are you sure you want to delete this session?" });
+    if (!ok) return;
 
     try {
       await adminAPI.deleteSession(String(id));

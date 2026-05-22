@@ -7,6 +7,7 @@ import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { API_BASE_URL } from "@/config/apiConfig";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -72,6 +73,7 @@ export default function Scores() {
   const [viewMode, setViewMode] = useState<"cumulative" | "monthly" | "contributors">("cumulative");
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   // CRUD States
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -564,7 +566,8 @@ export default function Scores() {
 
   const handleDelete = async () => {
     if (!editingScore) return;
-    if (!confirm("Delete this record?")) return;
+    const ok = await confirm({ title: "Delete score", description: "Delete this record?" });
+    if (!ok) return;
     setIsSaving(true);
     try {
       await adminAPI.deleteScore(editingScore.id);
@@ -871,8 +874,7 @@ export default function Scores() {
         <div style={{ display: "inline-flex", gap: 5, padding: 6, borderRadius: 50, background: "linear-gradient(135deg,#eae6dc,#f2ede4)", border: "1px solid #d8d2c6", boxShadow: "inset 0 1.5px 4px rgba(0,0,0,0.08)" }}>
           {[
             { id: "cumulative", label: "All-Time", icon: <Trophy size={14} /> },
-            { id: "monthly", label: "Monthly", icon: <Star size={14} /> },
-            { id: "contributors", label: "Hours", icon: <Clock size={14} /> }
+            { id: "monthly", label: "Monthly", icon: <Star size={14} /> }
           ].map(m => {
             const active = viewMode === m.id;
             return (
@@ -891,18 +893,16 @@ export default function Scores() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {viewMode !== "cumulative" && (
-            <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
-              <SelectTrigger style={{ height: 42, padding: "0 16px", borderRadius: 50, border: "1.5px solid #dde8e2", background: "#f8fdfb", fontSize: "0.875rem", fontWeight: 600, color: "#1e1e18", width: 160 }}>
-                <SelectValue placeholder="Month" />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-                {monthOptions.map(m => (
-                  <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
+            <SelectTrigger style={{ height: 42, padding: "0 16px", borderRadius: 50, border: "1.5px solid #dde8e2", background: "#f8fdfb", fontSize: "0.875rem", fontWeight: 600, color: "#1e1e18", width: 160 }}>
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+              {monthOptions.map(m => (
+                <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {hasWriteAccess() && (
             <div style={{ display: 'inline-flex', gap: 8 }}>
@@ -1222,16 +1222,7 @@ export default function Scores() {
                     <th style={{ padding: "13px 24px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 80 }}>Rank</th>
                     <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0" }}>Student</th>
                     <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
-                    {viewMode === "cumulative" ? (
-                      <>
-                        <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Total Hours</th>
-                        <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Total Score</th>
-                      </>
-                    ) : (
-                      <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>
-                        {viewMode === 'contributors' ? 'Hours' : 'Score'}
-                      </th>
-                    )}
+                    <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Score</th>
                     <th style={{ padding: "13px 24px", textAlign: "center", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 100 }}>Actions</th>
                   </tr>
                 </thead>
@@ -1239,8 +1230,6 @@ export default function Scores() {
                   <AnimatePresence mode="sync">
                     {paged.map((s, i) => {
                       const rank = (currentPage - 1) * PG + i;
-                      const metric = viewMode === 'contributors' ? (s.hours || 0) : s.points;
-                      
                       return (
                         <motion.tr key={s.enrollment_no} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: i * 0.02, duration: 0.2 }}
                           style={{ borderBottom: "1px solid #f4f1eb", transition: "background 0.15s" }}
@@ -1271,22 +1260,9 @@ export default function Scores() {
                             <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{s.batch || "N/A"}</span>
                           </td>
 
-                          {viewMode === "cumulative" ? (
-                            <>
-                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                                <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#18180e" }}>{s.hours || 0}h</span>
-                              </td>
-                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                                <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{s.points}</span>
-                              </td>
-                            </>
-                          ) : (
-                            <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                              <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>
-                                {metric}{viewMode === 'contributors' ? 'h' : ''}
-                              </span>
-                            </td>
-                          )}
+                          <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                            <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{s.points}</span>
+                          </td>
 
                           <td style={{ padding: "12px 24px", textAlign: "center" }}>
                             {hasWriteAccess() && (
@@ -1493,7 +1469,6 @@ export default function Scores() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Academic Points</Label><Input type="number" value={formData.points} onChange={e => setFormData({ ...formData, points: Number(e.target.value) })} className="rounded-xl" /></div>
-              <div className="space-y-1"><Label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#5a4a38" }}>Dedicated Hours</Label><Input type="number" value={formData.hours} onChange={e => setFormData({ ...formData, hours: Number(e.target.value) })} className="rounded-xl" /></div>
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <button onClick={handleDelete} disabled={isSaving} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 40, height: 40, borderRadius: 12, background: "#fde8ec", border: "1.5px solid #f4b8c0", color: "#c0363a", cursor: "pointer" }}><Trash2 size={18} /></button>

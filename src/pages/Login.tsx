@@ -8,7 +8,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
-import { isAuthenticated, saveSession } from '../lib/auth';
+import { isAuthenticated, saveSession, getStoredUser } from '../lib/auth';
 import { adminAPI, setAuthToken } from '../lib/adminApi';
 
 export default function Login() {
@@ -21,7 +21,8 @@ export default function Login() {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      navigate("/", { replace: true });
+      const user = getStoredUser();
+      navigate(user?.role === "admin" ? "/" : "/member-cv", { replace: true });
     }
   }, [navigate]);
 
@@ -60,7 +61,7 @@ export default function Login() {
         description: user.role === "admin" ? "Admin access enabled." : "Member access granted.",
       });
 
-      navigate("/", { replace: true });
+      navigate(user.role === "admin" ? "/" : "/member-cv", { replace: true });
     } catch (error: any) {
       console.error("Login error:", error);
       toast({
