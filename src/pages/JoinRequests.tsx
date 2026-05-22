@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, Download, Filter, Calendar, Mail, Phone, ExternalLink, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 import { adminAPI, parseList } from "@/lib/adminApi";
+import { API_BASE_URL } from "@/config/apiConfig";
 import { getEventsUrl } from "@/hooks/useServerEvents";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -21,7 +23,7 @@ interface JoinUsRow {
   name: string;
   enrollment: string;
   semester: string;
-  division: string;
+  division?: string | null;
   branch: string;
   college: string;
   contact: string;
@@ -51,6 +53,180 @@ export default function JoinRequests() {
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
 
+  function ResumePreview({ id, resumeLink }: { id: string; resumeLink: string }) {
+    const [open, setOpen] = useState(false);
+    const [loadingPreview, setLoadingPreview] = useState(false);
+    const [loadingNewTab, setLoadingNewTab] = useState(false);
+    const [blobUrl, setBlobUrl] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const previewApi = `${API_BASE_URL}/api/admin/join-requests/${id}/resume`;
+
+    const cleanup = () => {
+      if (blobUrl) {
+        try { URL.revokeObjectURL(blobUrl); } catch { /* ignore */ }
+        setBlobUrl(null);
+      }
+      setErrorMessage(null);
+    };
+
+    useEffect(() => {
+      return () => cleanup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    /** Fetch the resume binary through the backend proxy (sets correct headers). */
+    const fetchResumeBlobUrl = async (): Promise<string> => {
+      const token = localStorage.getItem("adminToken") || localStorage.getItem("authToken");
+      const headers: Record<string, string> = { Accept: "application/pdf" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const res = await fetch(previewApi, {
+        method: "GET",
+        cache: "no-store",
+        headers,
+      });
+
+      if (!res.ok) {
+        throw new Error(`Preview fetch failed: ${res.status} ${res.statusText}`);
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html") || contentType.includes("application/json")) {
+        throw new Error("Resume preview returned an unexpected response type. The file may be unavailable.");
+      }
+
+      // Always create the blob as application/pdf so the browser renders it inline
+      const arrayBuf = await res.arrayBuffer();
+      const blob = new Blob([arrayBuf], { type: "application/pdf" });
+      return URL.createObjectURL(blob);
+    };
+
+    const openPreview = async (e?: React.MouseEvent) => {
+      if (e) e.preventDefault();
+      setErrorMessage(null);
+      setLoadingPreview(true);
+      try {
+        const url = await fetchResumeBlobUrl();
+        // Set blob URL first, THEN open dialog — prevents flash of empty modal
+        setBlobUrl(url);
+        setOpen(true);
+      } catch (err: any) {
+        console.error("Resume preview error:", err);
+        const msg = err?.message || "Could not load resume preview.";
+        setErrorMessage(msg);
+        // Open dialog to show error message with fallback "Open in new tab" link
+        setOpen(true);
+        toast({ variant: "destructive", title: "Preview failed", description: msg });
+      } finally {
+        setLoadingPreview(false);
+      }
+    };
+
+    /**
+     * "Open in New Tab" — MUST go through the backend proxy, NOT the raw Cloudinary URL.
+     *
+     * Why: Cloudinary serves raw resources with Content-Disposition: attachment which
+     * forces a file download instead of inline PDF rendering in the browser.
+     * The backend proxy explicitly sets:
+     *   Content-Type: application/pdf
+     *   Content-Disposition: inline; filename=resume.pdf
+     *
+     * We fetch the binary through the proxy (with auth token), create a blob URL
+     * with type "application/pdf", and open that blob URL in a new tab.
+     * The browser then renders it as an inline PDF viewer.
+     */
+    const openInNewTab = async (e: React.MouseEvent) => {
+      e.preventDefault();
+
+      // If we already have a blob URL from the modal preview, reuse it
+      if (blobUrl) {
+        window.open(blobUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      setLoadingNewTab(true);
+      try {
+        const url = await fetchResumeBlobUrl();
+        window.open(url, "_blank", "noopener,noreferrer");
+        // Don't store this blobUrl in state — the new tab owns it now.
+        // The browser will clean it up when the tab closes.
+        // (We don't call revokeObjectURL here because the new tab still needs it.)
+      } catch (err: any) {
+        console.error("Open in new tab failed:", err);
+        toast({
+          variant: "destructive",
+          title: "Could not open resume",
+          description: err?.message || "Failed to open resume in new tab.",
+        });
+      } finally {
+        setLoadingNewTab(false);
+      }
+    };
+
+    return (
+      <>
+        {/* Trigger button — NOT wrapped in DialogTrigger to avoid race-condition
+            where the dialog opens before the blob fetch completes. Instead we
+            control open state manually via setOpen(true) after fetch succeeds. */}
+        <button
+          type="button"
+          onClick={openPreview}
+          disabled={loadingPreview}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800 hover:underline transition-colors disabled:opacity-60 disabled:cursor-not-allowed px-0 py-0 bg-transparent border-0 cursor-pointer"
+        >
+          {loadingPreview
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <ExternalLink className="w-3.5 h-3.5" />}
+          {loadingPreview ? "Loading..." : "View Resume"}
+        </button>
+
+        <Dialog open={open} onOpenChange={(v) => { if (!v) { cleanup(); } setOpen(v); }}>
+          <DialogContent className="max-w-5xl w-[90vw] min-h-[80vh]">
+            <DialogTitle>Resume Preview</DialogTitle>
+            <DialogDescription className="mb-2">Preview the uploaded resume below, or open it directly in a new tab.</DialogDescription>
+            <div className="w-full h-[72vh] border border-[#EAD8C0] rounded-2xl overflow-hidden bg-white flex items-center justify-center">
+              {blobUrl ? (
+                <iframe src={blobUrl} title={`Resume-${id}`} className="w-full h-full border-0" />
+              ) : errorMessage ? (
+                <div className="p-6 text-center space-y-2">
+                  <p className="text-sm font-semibold text-rose-700">{errorMessage}</p>
+                  <p className="text-xs text-[#8a7e72]">Use the button below to open the resume directly.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-[#8a7e72]">
+                  <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+                  <p className="text-sm font-medium">Loading preview...</p>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              {/* NOTE: This MUST NOT be a plain <a href={resumeLink}> pointing to the raw
+                  Cloudinary URL. Cloudinary serves raw resources with:
+                    Content-Disposition: attachment  →  forces browser download
+                  We go through the backend proxy instead, which sets:
+                    Content-Type: application/pdf
+                    Content-Disposition: inline; filename=resume.pdf
+                  This makes the browser render the PDF inline in a new tab. */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openInNewTab}
+                disabled={loadingNewTab}
+                className="rounded-xl gap-1.5"
+              >
+                {loadingNewTab
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <ExternalLink className="w-3.5 h-3.5" />}
+                {loadingNewTab ? "Opening..." : "Open in new tab"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
   const fetchRows = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
     try {
@@ -63,6 +239,7 @@ export default function JoinRequests() {
           status: String(row.status || "pending").trim().toLowerCase(),
           batch: String(row.batch || "").trim() || "2026",
           research_expertise: Array.isArray(row.research_expertise) ? row.research_expertise : [],
+          resume_link: (row.resume_link || row.cv_url || row.cvUrl || row.cv || row.resume || null) ? String(row.resume_link || row.cv_url || row.cvUrl || row.cv || row.resume).trim() : null,
         }))
       );
     } catch (error: any) {
@@ -145,7 +322,7 @@ export default function JoinRequests() {
         ]
       ],
       body: filteredRows.map(r => [
-        r.name, r.enrollment, r.semester, r.division, r.branch, r.college, r.contact, r.email, r.batch, r.created_at
+        r.name, r.enrollment, r.semester, r.division || "N/A", r.branch, r.college, r.contact, r.email, r.batch, r.created_at
       ]),
       styles: { fontSize: 8 },
       headStyles: { fillColor: [22, 178, 157] },
@@ -302,7 +479,7 @@ export default function JoinRequests() {
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-[#b0a898] uppercase">Semester</p>
-                        <p className="text-sm font-semibold text-[#5a5248]">{r.semester} (Div {r.division})</p>
+                        <p className="text-sm font-semibold text-[#5a5248]">{r.semester}{r.division ? ` (Div ${r.division})` : ""}</p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-[#b0a898] uppercase">Branch</p>
@@ -332,11 +509,16 @@ export default function JoinRequests() {
                         <p className="text-[10px] font-bold text-[#b0a898] uppercase">CPI / GPA</p>
                         <p className="text-sm font-bold text-teal-800">{formatValue(r.cpi)}</p>
                       </div>
-                      {r.resume_link && (
-                        <a href={r.resume_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800 hover:underline transition-colors mt-2">
-                          <ExternalLink className="w-3.5 h-3.5" /> View Resume
-                        </a>
-                      )}
+                      {/* Resume button — shown for ALL statuses when resume exists.
+                          Uses the same teal ExternalLink style as accepted member cards. */}
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Resume</p>
+                        {r.resume_link ? (
+                          <ResumePreview id={r.id} resumeLink={r.resume_link} />
+                        ) : (
+                          <span className="text-[11px] text-[#b0a898] italic">Not uploaded</span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="hidden xl:block w-[1px] bg-[#EAD8C0]" />
