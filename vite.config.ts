@@ -76,7 +76,7 @@ export default defineConfig(({ mode }) => ({
           'vendor-data': ['recharts', '@tanstack/react-query', 'date-fns', 'dayjs', 'zod'],
           'vendor-forms': ['react-hook-form', '@hookform/resolvers'],
           'vendor-utils': ['clsx', 'tailwind-merge', 'class-variance-authority', 'cmdk'],
-          'vendor-heavy': ['html2canvas', 'jspdf', 'jspdf-autotable', 'xlsx', 'googleapis'],
+          'vendor-heavy': ['jspdf', 'jspdf-autotable', 'xlsx', 'googleapis'],
         },
       },
     },

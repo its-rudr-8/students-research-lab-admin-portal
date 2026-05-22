@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
 import { useToast } from "@/hooks/use-toast";
 import StudentAvatar from "@/components/StudentAvatar";
 import ImageUpload from "@/components/ImageUpload";
+import CertificateUpload, { type Certification } from "@/components/CertificateUpload";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { getStoredUser } from "@/lib/auth";
 
@@ -65,7 +65,7 @@ type CVFormData = {
   research_papers: ResearchPaper[]; // Changed to JSON array format
   leadership: string;
   awards: string;
-  certifications: string;
+  certifications: Certification[]; // Now structured: [{name, url}]
   additional_achievements: string;
   internships: string;
   branch: string; // Added branch field
@@ -87,7 +87,7 @@ const emptyFormData = (): CVFormData => ({
   research_papers: [],
   leadership: "",
   awards: "",
-  certifications: "",
+  certifications: [], // structured array
   additional_achievements: "",
   internships: "",
   branch: "",
@@ -176,7 +176,47 @@ const parsePatents = (data: unknown): Patent[] => {
     .filter(Boolean) as Patent[];
 };
 
-
+// Parse certifications safely — handles null, old string arrays, and new {name, url} objects.
+const parseCertifications = (data: unknown): Certification[] => {
+  if (!data) return [];
+  let arr: unknown[];
+  if (Array.isArray(data)) {
+    arr = data;
+  } else if (typeof data === "string") {
+    const t = data.trim();
+    if (!t || t === "[]" || t === "null") return [];
+    try {
+      const parsed = JSON.parse(t);
+      arr = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      // Comma-separated fallback (really old data)
+      return t
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => ({ name: s, url: "" }));
+    }
+  } else {
+    return [];
+  }
+  return arr
+    .map((item) => {
+      if (typeof item === "string" && item.trim())
+        return { name: item.trim(), url: "" };
+      if (
+        typeof item === "object" &&
+        item !== null &&
+        ((item as any).name || (item as any).url)
+      ) {
+        return {
+          name: String((item as any).name || ""),
+          url: String((item as any).url || ""),
+        };
+      }
+      return null;
+    })
+    .filter(Boolean) as Certification[];
+};
 
 const TextSection = ({ label, field, placeholder, hint, formData, setFormData, disabled }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string; formData: CVFormData; setFormData: React.Dispatch<React.SetStateAction<CVFormData>>; disabled: boolean }) => (
   <div className="space-y-2">
@@ -338,7 +378,7 @@ export default function MemberCV() {
           research_papers: parseResearchPapers(d.research_papers),
           leadership: arrToText(d.leadership),
           awards: arrToText(d.awards),
-          certifications: arrToText(d.certifications),
+          certifications: parseCertifications(d.certifications),
           additional_achievements: arrToText(d.additional_achievements),
           internships: arrToText(d.internships),
           branch: String(d.branch || ""),
@@ -383,7 +423,7 @@ export default function MemberCV() {
         research_papers: formData.research_papers, // Now sending as JSON array
         leadership: textToArr(formData.leadership),
         awards: textToArr(formData.awards),
-        certifications: textToArr(formData.certifications),
+        certifications: formData.certifications, // already [{name,url}] array
         additional_achievements: textToArr(formData.additional_achievements),
         internships: textToArr(formData.internships),
         patents: formData.patents, // Now sending as JSON array
@@ -710,7 +750,12 @@ export default function MemberCV() {
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🏅 Leadership" field="leadership" placeholder="Lab Coordinator, SRL 2024" hint="One per line" />
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🎖️ Awards" field="awards" placeholder="Best Presenter Award" hint="One per line" />
             </div>
-            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📜 Certifications" field="certifications" placeholder="AWS Cloud Practitioner&#10;Google ML Crash Course" hint="One per line — displayed as chips" />
+            <CertificateUpload
+              key={selectedEnrollment}
+              certifications={formData.certifications}
+              onChange={(certs) => setFormData((p) => ({ ...p, certifications: certs }))}
+              disabled={!canEditSelected}
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="💼 Internships" field="internships" placeholder="Software Intern, XYZ Corp, Summer 2024" hint="One per line" />
               <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="⭐ Additional Achievements" field="additional_achievements" placeholder="Published article in campus newsletter" hint="One per line" />
