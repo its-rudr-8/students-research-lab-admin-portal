@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Pencil, Plus, Trash2, BookOpen, Calendar as CalendarIcon, ExternalLink, Users, Building2, Landmark, GraduationCap, Upload, X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -493,6 +494,8 @@ export default function Publications() {
   };
 
 
+  const confirm = useConfirm();
+
   const handleDeletePublication = async (id: string) => {
     if (!canEdit) {
       toast({
@@ -502,20 +505,15 @@ export default function Publications() {
       });
       return;
     }
+    const ok = await confirm({ title: "Delete publication", description: "Are you sure you want to delete this publication?" });
+    if (!ok) return;
 
     try {
       await adminAPI.deletePublication(id);
-      toast({
-        title: "Success",
-        description: "Publication deleted successfully",
-      });
+      toast({ title: "Success", description: "Publication deleted successfully" });
       fetchPublications();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error.message || "Failed to delete publication",
-      });
+      toast({ variant: "destructive", title: "Error", description: error.message || "Failed to delete publication" });
     }
   };
 

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import ImageUpload from "@/components/ImageUpload";
@@ -204,6 +205,7 @@ export default function Activities() {
 
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
+  const confirm = useConfirm();
 
   useEffect(() => { fetchActivities(); }, []);
 
@@ -311,6 +313,8 @@ export default function Activities() {
 
   const handleDeleteActivity = async (id: string | number) => {
     if (!canEdit) return;
+    const ok = await confirm({ title: "Delete activity", description: "Are you sure you want to delete this activity?" });
+    if (!ok) return;
     try {
       await adminAPI.deleteActivity(String(id));
       toast({ title: "Activity deleted" });

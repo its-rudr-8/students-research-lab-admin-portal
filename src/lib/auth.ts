@@ -11,6 +11,19 @@ const AUTH_TOKEN_KEY = "authToken";
 const ADMIN_TOKEN_KEY = "adminToken";
 const USER_DATA_KEY = "userData";
 
+const decodeJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
 export const isAuthenticated = (): boolean => {
   try {
     const adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -50,6 +63,8 @@ export const getAuthToken = (): string | null => {
 export const getStoredUser = (): UserSession | null => {
   try {
     const raw = localStorage.getItem(USER_DATA_KEY);
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY) || localStorage.getItem(AUTH_TOKEN_KEY) || "";
+    const tokenPayload = token ? decodeJwtPayload(token) : null;
     
     if (!raw) {
       console.log("[Auth] ❌ No user data in storage");
@@ -66,7 +81,7 @@ export const getStoredUser = (): UserSession | null => {
     const user: UserSession = {
       email: parsed.email,
       name: parsed.name || parsed.email,
-      enrollmentNo: parsed.enrollmentNo,
+      enrollmentNo: parsed.enrollmentNo || parsed.enrollment_no || tokenPayload?.enrollmentNo || tokenPayload?.enrollment_no,
       role: parsed.role === "admin" ? "admin" : "member",
     };
     

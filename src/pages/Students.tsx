@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import StudentAvatar from "@/components/StudentAvatar";
 import BatchTabs from "@/components/BatchTabs";
 import { hasWriteAccess } from "@/lib/auth";
@@ -206,8 +207,37 @@ export default function Students() {
     if (errs.length) { toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") }); return; }
     try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); await load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r) { setEditSt(null); toast({ title: "Student updated" }); await load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
-  const handleDel = async (s: Student) => { if (!canEdit) return; try { await adminAPI.deleteStudent(s.enrollment_no); setStudents(p => p.filter(x => x.id !== s.id)); setSel(prev => { const n = new Set(prev); n.delete(s.enrollment_no); return n; }); toast({ title: "Student removed" }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
-  const handleBulkDel = async () => { if (!canEdit) return; const rm = students.filter(s => sel.has(s.enrollment_no)); try { await Promise.all(rm.map(s => adminAPI.deleteStudent(s.enrollment_no))); setStudents(p => p.filter(s => !sel.has(s.enrollment_no))); setSel(new Set()); toast({ title: `${rm.length} students removed` }); } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
+  const confirm = useConfirm();
+
+  const handleDel = async (s: Student) => {
+    if (!canEdit) return;
+    const ok = await confirm({ title: "Delete student", description: `Remove ${s.student_name || s.enrollment_no}? This action cannot be undone.` });
+    if (!ok) return;
+    try {
+      await adminAPI.deleteStudent(s.enrollment_no);
+      setStudents((p) => p.filter((x) => x.id !== s.id));
+      setSel((prev) => { const n = new Set(prev); n.delete(s.enrollment_no); return n; });
+      toast({ title: "Student removed" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    }
+  };
+
+  const handleBulkDel = async () => {
+    if (!canEdit) return;
+    const rm = students.filter((s) => sel.has(s.enrollment_no));
+    if (rm.length === 0) return;
+    const ok = await confirm({ title: "Delete students", description: `Remove ${rm.length} selected students? This action cannot be undone.` });
+    if (!ok) return;
+    try {
+      await Promise.all(rm.map((s) => adminAPI.deleteStudent(s.enrollment_no)));
+      setStudents((p) => p.filter((s) => !sel.has(s.enrollment_no)));
+      setSel(new Set());
+      toast({ title: `${rm.length} students removed` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    }
+  };
 
   const THcols = ["STUDENT", "ENROLLMENT NO", "DEPARTMENT", "BATCH", "MEMBER TYPE", "ACTIONS"];
   const THcls = ["", "hidden lg:table-cell", "hidden md:table-cell", "", "hidden xl:table-cell", ""];

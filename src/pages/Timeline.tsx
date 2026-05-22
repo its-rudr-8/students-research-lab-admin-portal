@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +76,7 @@ export default function Timeline() {
   });
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
+  const confirm = useConfirm();
 
   useEffect(() => {
     fetchTimelineEntries();
@@ -197,6 +199,9 @@ export default function Timeline() {
       });
       return;
     }
+
+    const ok = await confirm({ title: "Delete timeline entry", description: "Are you sure you want to delete this timeline entry?" });
+    if (!ok) return;
 
     try {
       await adminAPI.deleteTimelineEntry(String(id));

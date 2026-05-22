@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Loader2, Pencil, Plus, Trash2, Award, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { hasWriteAccess } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -57,6 +58,7 @@ export default function Achievements() {
   });
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
+  const confirm = useConfirm();
 
   useEffect(() => {
     fetchAchievements();
@@ -136,7 +138,8 @@ export default function Achievements() {
 
   const handleDeleteAchievement = async (id: number) => {
     if (!canEdit) return;
-    if (!confirm("Are you sure you want to delete this achievement?")) return;
+    const ok = await confirm({ title: "Delete achievement", description: "Are you sure you want to delete this achievement?" });
+    if (!ok) return;
 
     try {
       await adminAPI.deleteAchievement(String(id));

@@ -4,6 +4,7 @@ import { Loader2, Search, Pencil, FileText, Folder, Trophy, Check, ArrowLeft, Us
 import BatchTabs from "@/components/BatchTabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -93,6 +94,44 @@ const emptyFormData = (): CVFormData => ({
   patents: [],
 });
 
+function ResearchPaperDeleteButton({ idx, formData, setFormData }: { idx: number; formData: CVFormData; setFormData: (d: CVFormData) => void }) {
+  const confirm = useConfirm();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-red-500 hover:bg-red-50"
+      onClick={async () => {
+        const ok = await confirm({ title: "Delete research paper", description: "Remove this research paper from the CV?" });
+        if (!ok) return;
+        const updated = formData.research_papers.filter((_, i) => i !== idx);
+        setFormData({ ...formData, research_papers: updated });
+      }}
+    >
+      Delete
+    </Button>
+  );
+}
+
+function PatentDeleteButton({ idx, formData, setFormData }: { idx: number; formData: CVFormData; setFormData: (d: CVFormData) => void }) {
+  const confirm = useConfirm();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="w-full text-red-500 hover:bg-red-50"
+      onClick={async () => {
+        const ok = await confirm({ title: "Delete patent", description: "Remove this patent from the CV?" });
+        if (!ok) return;
+        const updated = formData.patents.filter((_, i) => i !== idx);
+        setFormData({ ...formData, patents: updated });
+      }}
+    >
+      Delete Patent
+    </Button>
+  );
+}
+
 // Convert a string[] from the API to newline-separated textarea string
 const arrToText = (arr: unknown): string =>
   Array.isArray(arr) ? arr.join("\n") : "";
@@ -174,6 +213,8 @@ export default function MemberCV() {
   const { toast } = useToast();
   const currentUser = useMemo(() => getStoredUser(), []);
   const isAdmin = currentUser?.role === "admin";
+  const currentEmail = String(currentUser?.email || "").trim().toLowerCase();
+  const currentEnrollment = String(currentUser?.enrollmentNo || "").trim().toUpperCase();
 
   const selectedMember = useMemo(
     () => members.find((member) => member.enrollment_no === selectedEnrollment) || null,
@@ -183,25 +224,21 @@ export default function MemberCV() {
   useEffect(() => {
     if (isAdmin) return;
 
-    const ownEnrollment = currentUser?.enrollmentNo || "";
-    if (!ownEnrollment) {
+    if (!currentEnrollment && !currentEmail) {
       if (selectedEnrollment) setSelectedEnrollment("");
       return;
     }
-
-    if (selectedEnrollment !== ownEnrollment) {
-      setSelectedEnrollment(ownEnrollment);
-    }
-  }, [isAdmin, currentUser?.enrollmentNo, selectedEnrollment]);
+  }, [isAdmin, currentEmail, currentEnrollment, selectedEnrollment]);
 
   useEffect(() => {
     const fetchMembers = async () => {
       try {
         setLoadingMembers(true);
-        const [res, allCVs] = await Promise.all([
-          adminAPI.getStudents(),
-          isAdmin ? adminAPI.getAllMemberCVs().catch(() => []) : Promise.resolve([]),
-        ]);
+        const res = await adminAPI.getStudents();
+
+        const allCVs = isAdmin
+          ? await adminAPI.getAllMemberCVs().catch(() => [])
+          : [];
 
         // Build enrollment_no → computed CV stats map (admin grid only)
         const cvMap = new Map<string, { ongoing: number; hacks: number; papers: number }>();
@@ -240,8 +277,14 @@ export default function MemberCV() {
           setSelectedEnrollment("");
           setShowGrid(true);
         } else {
-          const ownEnrollment = currentUser.enrollmentNo || "";
-          const ownProfile = fetchedMembers.filter((row: any) => row.enrollment_no === ownEnrollment);
+          const ownProfile = fetchedMembers.filter((row: any) => {
+            const rowEnrollment = String(row.enrollment_no || "").trim().toUpperCase();
+            const rowEmail = String(row.email || "").trim().toLowerCase();
+            return (
+              (currentEnrollment && rowEnrollment === currentEnrollment) ||
+              (currentEmail && rowEmail === currentEmail)
+            );
+          });
           setMembers(ownProfile);
           setSelectedEnrollment(ownProfile[0]?.enrollment_no || "");
           setShowGrid(false);
@@ -635,17 +678,7 @@ export default function MemberCV() {
                           <option value="published">Published</option>
                         </select>
                         {canEditSelected && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:bg-red-50"
-                            onClick={() => {
-                              const updated = formData.research_papers.filter((_, i) => i !== idx);
-                              setFormData({ ...formData, research_papers: updated });
-                            }}
-                          >
-                            Delete
-                          </Button>
+                          <ResearchPaperDeleteButton idx={idx} formData={formData} setFormData={setFormData} />
                         )}
                       </div>
                     </div>
@@ -750,17 +783,7 @@ export default function MemberCV() {
                         </select>
                       </div>
                       {canEditSelected && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full text-red-500 hover:bg-red-50"
-                          onClick={() => {
-                            const updated = formData.patents.filter((_, i) => i !== idx);
-                            setFormData({ ...formData, patents: updated });
-                          }}
-                        >
-                          Delete Patent
-                        </Button>
+                        <PatentDeleteButton idx={idx} formData={formData} setFormData={setFormData} />
                       )}
                     </div>
                   ))
