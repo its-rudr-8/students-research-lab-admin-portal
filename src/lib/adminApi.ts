@@ -446,7 +446,54 @@ export const adminAPI = {
 
     return response.json();
   },
-  
+
+  /**
+   * Upload a single certificate image to Cloudinary.
+   * PDF → image conversion must be done before calling this (see certificateUpload.ts).
+   * POST /api/admin/upload-certificate — accessible by any authenticated user.
+   * Returns { data: { url, publicId } }
+   */
+  async uploadCertificate(formData: FormData) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {
+      "ngrok-skip-browser-warning": "true",
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    if (import.meta.env.DEV) {
+      headers["x-dev-token"] = "dev-bypass";
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/admin/upload-certificate`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    } catch (networkError: any) {
+      throw new Error("Network error: unable to reach the server. Please check your connection.");
+    }
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const msg =
+        errorData.message ||
+        errorData.detail ||
+        `Certificate upload failed (${response.status}: ${response.statusText})`;
+      if (response.status === 401 && !token) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("You are not logged in. Please log in again.");
+      }
+      throw new Error(msg);
+    }
+
+    return response.json();
+  },
+
   // Upload an XLSX for session parsing (POST /api/sessions/upload)
   async uploadSessionXlsx(formData: FormData) {
     const token = getAuthToken();
