@@ -6,6 +6,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function ScrollToTopButton() {
   const [isVisible, setIsVisible] = useState(false);
+  const [hasActiveFooter, setHasActiveFooter] = useState(false);
   const circleRef = useRef<SVGCircleElement | null>(null);
 
   useEffect(() => {
@@ -31,6 +32,11 @@ export default function ScrollToTopButton() {
       if (circleRef.current) {
         circleRef.current.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - progress));
       }
+
+      // Check if a sticky bottom action footer is visible on the page
+      const footer = document.querySelector('.sticky.bottom-0');
+      const isFooterVisible = !!(footer && !footer.classList.contains('opacity-0'));
+      setHasActiveFooter(isFooterVisible);
 
       // State only drives visibility — updates are infrequent (threshold cross)
       setIsVisible(scrollTop > 120);
@@ -71,8 +77,12 @@ export default function ScrollToTopButton() {
   return (
     <div
       aria-hidden={!isVisible}
-      className={`fixed bottom-5 right-5 sm:bottom-7 sm:right-7 z-40
-        transition-[opacity,transform] duration-300 ease-out
+      className={`fixed right-5 sm:right-7 z-40
+        transition-all duration-300 ease-out
+        ${hasActiveFooter 
+          ? "bottom-[84px] sm:bottom-[96px]" 
+          : "bottom-5 sm:bottom-7"
+        }
         ${isVisible
           ? "opacity-100 translate-y-0 pointer-events-auto"
           : "opacity-0 translate-y-3 pointer-events-none"

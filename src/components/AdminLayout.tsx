@@ -144,14 +144,10 @@ export default function AdminLayout() {
           x: isDesktop ? 0 : (sidebarOpen ? 0 : -260)
         }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        className={`flex flex-col border-r border-border bg-sidebar h-screen shrink-0 z-30 shadow-xl lg:shadow-none ${
-          isDesktop ? "sticky top-0 self-start" : "fixed top-0 left-0"
-        }`}
+        className="flex flex-col border-r border-border bg-sidebar h-screen shrink-0 z-30 shadow-xl lg:shadow-none fixed lg:sticky top-0 left-0 lg:left-auto lg:self-start"
       >
         {/* Sidebar Header with Logo and Collapse Toggle */}
-        <div className={`relative flex items-center border-b border-border shrink-0 h-16 transition-all duration-200 ${
-          sidebarOpen ? "px-4 justify-between" : "px-0 justify-center"
-        }`}>
+        <div className="relative flex items-center border-b border-border shrink-0 h-16 px-4 justify-between">
           <NavLink
             to="/"
             end
@@ -204,8 +200,8 @@ export default function AdminLayout() {
               to={item.path}
               end={item.path === "/"}
               className={({ isActive }) =>
-                `sidebar-item ${isActive ? "active" : ""} ${
-                  sidebarOpen ? "px-3" : "px-0 justify-center"
+                `sidebar-item transition-all duration-300 ease-in-out ${isActive ? "active" : ""} ${
+                  sidebarOpen ? "px-3 justify-start" : "px-[27px] justify-start"
                 }`
               }
             >
@@ -232,13 +228,24 @@ export default function AdminLayout() {
             onClick={handleLogout}
             variant="ghost"
             size="sm"
-            className={`w-full text-muted-foreground hover:text-destructive gap-2 rounded-lg transition-all duration-200 ${
-              sidebarOpen ? "justify-start px-3" : "justify-center px-0"
+            className={`w-full text-muted-foreground hover:text-destructive gap-2 rounded-lg transition-all duration-300 ease-in-out ${
+              sidebarOpen ? "justify-start px-3" : "justify-start px-[20px]"
             }`}
             title={sidebarOpen ? "" : "Sign Out"}
           >
-            <LogOut className="w-4 h-4" />
-            {sidebarOpen && <span>Sign Out</span>}
+            <LogOut className="w-4 h-4 shrink-0" />
+            <AnimatePresence>
+              {sidebarOpen && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  Sign Out
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Button>
         </div>
       </motion.aside>

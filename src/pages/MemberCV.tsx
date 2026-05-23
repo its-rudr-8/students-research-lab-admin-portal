@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { API_BASE_URL } from "@/config/apiConfig";
 import { Loader2, Search, Pencil, FileText, Folder, Trophy, Check, ArrowLeft, Users } from "lucide-react";
 import BatchTabs from "@/components/BatchTabs";
@@ -163,10 +163,14 @@ const parsePatents = (data: unknown): Patent[] => {
   return data
     .map((item) => {
       if (typeof item === "object" && item !== null) {
+        let appDate = (item as any).application_date || "";
+        if (appDate && typeof appDate === "string" && appDate.includes("T")) {
+          appDate = appDate.split("T")[0];
+        }
         return {
           patent_id: (item as any).patent_id,
           patent_title: (item as any).patent_title || "",
-          application_date: (item as any).application_date || "",
+          application_date: appDate,
           application_status: (item as any).application_status || "Filed",
           application_number: (item as any).application_number || "",
         };
@@ -216,6 +220,14 @@ const parseCertifications = (data: unknown): Certification[] => {
       return null;
     })
     .filter(Boolean) as Certification[];
+};
+
+const getLocalTodayString = (): string => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const TextSection = ({ label, field, placeholder, hint, formData, setFormData, disabled }: { label: string; field: keyof CVFormData; placeholder?: string; hint?: string; formData: CVFormData; setFormData: React.Dispatch<React.SetStateAction<CVFormData>>; disabled: boolean }) => (
@@ -397,6 +409,8 @@ export default function MemberCV() {
     fetchProfile();
   }, [selectedEnrollment, selectedMember?.batch]);
 
+
+
   const canEditSelected = !!selectedEnrollment && (!!isAdmin || (currentUser?.enrollmentNo && currentUser.enrollmentNo === selectedEnrollment));
 
   const handleSave = async () => {
@@ -404,6 +418,21 @@ export default function MemberCV() {
       return toast({ variant: "destructive", title: "No profile selected", description: "Please select a member profile first." });
     if (!canEditSelected)
       return toast({ variant: "destructive", title: "Permission denied", description: "You can edit only your own profile." });
+
+    // Validate patent dates (no future dates allowed)
+    const todayStr = getLocalTodayString();
+    if (Array.isArray(formData.patents)) {
+      for (const patent of formData.patents) {
+        if (patent.application_date && patent.application_date > todayStr) {
+          return toast({
+            variant: "destructive",
+            title: "Invalid Patent Date",
+            description: `Patent "${patent.patent_title || "Untitled"}" cannot have a future application date.`,
+          });
+        }
+      }
+    }
+
     try {
       setSaving(true);
       const payload = {
@@ -589,7 +618,7 @@ export default function MemberCV() {
       ) : loadingProfile ? (
         <div className="glass-card rounded-2xl p-5 sm:p-8 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin inline-block mr-2" /> Loading profile...</div>
       ) : (
-        <div className="space-y-6 pb-24">
+        <div className="space-y-6">
           {/* Main Form Card */}
           <div className="bg-[#F3F0E8] rounded-[24px] p-6 sm:p-10 border border-[#D4C9B6] shadow-sm space-y-8">
 
@@ -801,6 +830,7 @@ export default function MemberCV() {
                         <Input
                           placeholder="Application Date (YYYY-MM-DD)"
                           type="date"
+                          max={getLocalTodayString()}
                           value={patent.application_date}
                           onChange={(e) => {
                             const updated = [...formData.patents];
@@ -852,6 +882,8 @@ export default function MemberCV() {
             </div>
           </div>
           
+
+
             <div className="bg-[#DAEBE1] rounded-[24px] p-6 sm:p-8 mt-6 border border-[#a8dbc0] shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/40 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
             <h3 className="text-[#21493A] font-bold text-lg mb-6 relative z-10">5. Execution Analytics</h3>
@@ -879,19 +911,31 @@ export default function MemberCV() {
               </div>
             </div>
           </div>
-          
-          {/* Fixed Bottom Action Footer */}
-          <div className="fixed bottom-0 left-0 right-0 bg-[#EDE8DE]/90 backdrop-blur-xl border-t border-[#D4C9B6] p-4 flex flex-col sm:flex-row justify-between items-center gap-4 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] lg:pl-64">
-            <div className="w-full sm:w-auto text-center sm:text-left flex items-center gap-4">
-              <Button onClick={handleSave} disabled={saving || !canEditSelected} className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-8 py-6 font-semibold shadow-md">
+
+          {/* Bottom Actions (Non-sticky form footer) */}
+          <div className="bg-[#EDE8DE] rounded-[24px] p-6 mt-6 border border-[#D4C9B6] shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="w-full sm:w-auto text-center sm:text-left">
+              <Button 
+                onClick={handleSave} 
+                disabled={saving || !canEditSelected} 
+                className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-xl px-8 py-3.5 font-semibold shadow-md w-full sm:w-auto"
+              >
                 {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Save Draft"}
               </Button>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Button variant="outline" className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-full px-8 py-6 font-semibold bg-white" onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}>
+              <Button 
+                variant="outline" 
+                className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-xl px-8 py-3.5 font-semibold bg-white" 
+                onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}
+              >
                 Back
               </Button>
-              <Button className="flex-1 sm:flex-none bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-full px-8 py-6 font-semibold shadow-md" onClick={handleSave} disabled={saving || !canEditSelected}>
+              <Button 
+                className="flex-1 sm:flex-none bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-xl px-8 py-3.5 font-semibold shadow-md" 
+                onClick={handleSave} 
+                disabled={saving || !canEditSelected}
+              >
                 {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</> : <>Submit <Check className="w-4 h-4 ml-2" /></>}
               </Button>
             </div>
