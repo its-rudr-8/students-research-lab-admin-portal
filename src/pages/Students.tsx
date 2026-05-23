@@ -15,13 +15,19 @@ import { hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { useServerEvent } from "@/hooks/useServerEvents";
 
-interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; profile_image?: string; }
+interface Student { id?: number; student_name: string; enrollment_no: string; institute_name?: string; department?: string; semester?: number; division?: string; batch?: string; email: string; contact_no?: string; gender?: string; member_type?: string; member?: string; profile_image?: string; }
 
 const PG = 10;
 const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
-const mb = (t?: string) => { const s = (t || "").toLowerCase(); if (s.includes("head")) return { bg: "#dcf0e6", c: "#1a5c3a", b: "#a8d8bc", d: "#2e8a58" }; if (s.includes("peer")) return { bg: "#fde8f3", c: "#8f2557", b: "#f4b8d8", d: "#c94080" }; return { bg: "#f0eee8", c: "#5a5248", b: "#d8d4cc", d: "#8a8278" }; };
+const mb = (t?: string) => {
+  const s = (t || "").toLowerCase();
+  if (s.includes("senior"))   return { bg: "#e8f4fd", c: "#1a5880", b: "#a8d0f0", d: "#2a7ab8" };
+  if (s.includes("graduated")) return { bg: "#f0e8fc", c: "#5a1a8a", b: "#c8a8e8", d: "#8a38c8" };
+  // Default: New Member (and any legacy values)
+  return { bg: "#e8f5ec", c: "#1a5c3a", b: "#a8d8bc", d: "#2e8a58" };
+};
 const BB = { bg: "#e4f0ec", c: "#1e5c42", b: "#aad4c0" };
-const BLANK = { student_name: "", enrollment_no: "", email: "", contact_no: "", department: "", institute_name: "", semester: "", division: "", batch: "", gender: "male", member_type: "General Members", profile_image: "" };
+const BLANK = { student_name: "", enrollment_no: "", email: "", contact_no: "", department: "", institute_name: "", semester: "", division: "", batch: "", gender: "male", member_type: "New Member", member: "student member", profile_image: "" };
 
 function FormFields({
   data,
@@ -135,12 +141,48 @@ function FormFields({
           <Select value={data.member_type} onValueChange={v => set({ ...data, member_type: v })}>
             <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="General Members">General Members</SelectItem>
-              <SelectItem value="Head-Appointed">Head-Appointed</SelectItem>
-              <SelectItem value="Peer-Nominated">Peer-Nominated</SelectItem>
+              <SelectItem value="New Member">New Member</SelectItem>
+              <SelectItem value="Senior Member">Senior Member</SelectItem>
+              <SelectItem value="Graduated">Graduated</SelectItem>
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* RA Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl border border-[#e4ddd0] bg-[#faf8f5]">
+        <div>
+          <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a3a2a", margin: 0 }}>Research Assistant (RA)</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => set({ ...data, member: data.member === "Research Assistant" ? "student member" : "Research Assistant" })}
+          style={{
+            width: 44,
+            height: 24,
+            borderRadius: 50,
+            border: "none",
+            background: data.member === "Research Assistant" ? "#1e4a34" : "#d0cac0",
+            cursor: "pointer",
+            position: "relative",
+            transition: "background 0.2s",
+            flexShrink: 0,
+          }}
+          aria-label="Toggle Research Assistant"
+          aria-pressed={data.member === "Research Assistant"}
+        >
+          <span style={{
+            position: "absolute",
+            top: 3,
+            left: data.member === "Research Assistant" ? 23 : 3,
+            width: 18,
+            height: 18,
+            borderRadius: "50%",
+            background: "#fff",
+            transition: "left 0.2s",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+          }} />
+        </button>
       </div>
     </div>
   );
@@ -194,7 +236,7 @@ export default function Students() {
   const onSearch = (v: string) => { setSearch(v); setPage(1); setSel(new Set()); };
   const toggleSel = (id: string) => { const s = new Set(sel); s.has(id) ? s.delete(id) : s.add(id); setSel(s); };
   const toggleAll = () => { if (allSel) { const s = new Set(sel); paged.forEach(st => s.delete(st.enrollment_no)); setSel(s); } else { const s = new Set(sel); paged.forEach(st => s.add(st.enrollment_no)); setSel(s); } };
-  const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "General Members", profile_image: s.profile_image || "" }); };
+  const openEdit = (s: Student) => { setEditSt(s); setForm({ student_name: s.student_name || "", enrollment_no: s.enrollment_no || "", email: s.email || "", contact_no: s.contact_no || "", department: s.department || "", institute_name: s.institute_name || "", semester: String(s.semester || ""), division: s.division || "", batch: s.batch || "", gender: s.gender || "male", member_type: s.member_type || "New Member", member: s.member || "student member", profile_image: s.profile_image || "" }); };
 
   const handleAdd = async () => {
     if (!canEdit) return;
@@ -353,9 +395,16 @@ export default function Students() {
                           <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: BB.bg, color: BB.c, border: `1.5px solid ${BB.b}`, letterSpacing: "0.02em" }}>{s.batch || "N/A"}</span>
                         </td>
                         <td className="hidden xl:table-cell" style={{ padding: "12px 16px" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 600, background: badge.bg, color: badge.c, border: `1.5px solid ${badge.b}` }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: badge.d, flexShrink: 0 }} />{s.member_type || "Member"}
-                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 12px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 600, background: badge.bg, color: badge.c, border: `1.5px solid ${badge.b}` }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: badge.d, flexShrink: 0 }} />{s.member_type || "Member"}
+                            </span>
+                            {s.member === "Research Assistant" && (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 50, fontSize: "0.65rem", fontWeight: 700, background: "#fff3e0", color: "#b45309", border: "1.5px solid #fed7aa", letterSpacing: "0.04em" }}>
+                                ⚗ RA
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: "12px 16px", textAlign: "center" as const }}>
                           {canEdit && (

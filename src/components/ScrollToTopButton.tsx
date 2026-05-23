@@ -1,24 +1,51 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 
+const RADIUS = 26;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
 export default function ScrollToTopButton() {
-  const [visible, setVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const circleRef = useRef<SVGCircleElement | null>(null);
 
   useEffect(() => {
     const scrollContainer = document.querySelector("[data-scroll-container='app-main']") as HTMLElement | null;
 
     const handleScroll = () => {
-      const offset = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
-      setVisible(offset > 280);
+      let scrollTop = 0;
+      let docHeight = 0;
+
+      if (scrollContainer) {
+        scrollTop = scrollContainer.scrollTop;
+        const scrollHeight = scrollContainer.scrollHeight;
+        const clientHeight = scrollContainer.clientHeight;
+        docHeight = scrollHeight - clientHeight;
+      } else {
+        scrollTop = window.scrollY;
+        docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      }
+
+      const progress = docHeight > 0 ? Math.min(scrollTop / docHeight, 1) : 0;
+
+      // Direct DOM write — bypasses React entirely, no re-render chain
+      if (circleRef.current) {
+        circleRef.current.style.strokeDashoffset = String(CIRCUMFERENCE * (1 - progress));
+      }
+
+      // State only drives visibility — updates are infrequent (threshold cross)
+      setIsVisible(scrollTop > 120);
     };
 
     handleScroll();
+
     if (scrollContainer) {
       scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
     } else {
       window.addEventListener("scroll", handleScroll, { passive: true });
     }
+
+    // Set up window resize listener in case container size changes
+    window.addEventListener("resize", handleScroll, { passive: true });
 
     return () => {
       if (scrollContainer) {
@@ -26,6 +53,7 @@ export default function ScrollToTopButton() {
       } else {
         window.removeEventListener("scroll", handleScroll);
       }
+      window.removeEventListener("resize", handleScroll);
     };
   }, []);
 
@@ -41,22 +69,65 @@ export default function ScrollToTopButton() {
   };
 
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.button
-          type="button"
-          initial={{ opacity: 0, y: 18, scale: 0.92 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 18, scale: 0.92 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          onClick={scrollToTop}
-          className="fixed bottom-5 right-5 sm:bottom-7 sm:right-7 z-40 h-12 w-12 rounded-full border border-primary/25 bg-card/85 text-primary shadow-[var(--shadow-elevated)] backdrop-blur-xl transition-colors hover:bg-primary hover:text-primary-foreground"
-          aria-label="Scroll to top"
-          title="Scroll to top"
+    <div
+      aria-hidden={!isVisible}
+      className={`fixed bottom-5 right-5 sm:bottom-7 sm:right-7 z-40
+        transition-[opacity,transform] duration-300 ease-out
+        ${isVisible
+          ? "opacity-100 translate-y-0 pointer-events-auto"
+          : "opacity-0 translate-y-3 pointer-events-none"
+        }`}
+    >
+      <div className="relative w-16 h-16">
+        {/* SVG ring */}
+        <svg
+          width="64" height="64"
+          viewBox="0 0 64 64"
+          className="-rotate-90"
+          aria-hidden="true"
         >
-          <ArrowUp className="mx-auto h-5 w-5" />
-        </motion.button>
-      )}
-    </AnimatePresence>
+          {/* Track ring */}
+          <circle
+            cx="32" cy="32" r={RADIUS}
+            stroke="currentColor"
+            strokeWidth="3.5"
+            fill="none"
+            className="text-primary/15"
+          />
+          {/* Progress arc — strokeDashoffset updated directly via ref */}
+          <circle
+            ref={circleRef}
+            cx="32" cy="32" r={RADIUS}
+            stroke="currentColor"
+            strokeWidth="3.5"
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={CIRCUMFERENCE}
+            className="text-primary"
+            style={{ transition: "stroke-dashoffset 100ms linear" }}
+          />
+        </svg>
+
+        {/* Button sits centered inside the ring */}
+        <button
+          onClick={scrollToTop}
+          tabIndex={isVisible ? 0 : -1}
+          className="
+            absolute inset-0 m-auto
+            w-10 h-10
+            bg-primary hover:bg-primary/90 text-primary-foreground
+            rounded-full shadow-md
+            flex items-center justify-center
+            active:scale-90
+            transition-[background-color,transform] duration-150
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+          "
+          aria-label="Scroll to top"
+        >
+          <ArrowUp className="w-4 h-4" strokeWidth="2.5" />
+        </button>
+      </div>
+    </div>
   );
 }
