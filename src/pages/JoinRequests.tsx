@@ -38,6 +38,7 @@ interface JoinUsRow {
   research_expertise?: string[];
   research_publication?: string | null;
   research_ongoing?: string | null;
+  description?: string | null;
   status?: string;
   created_at: string;
 }
@@ -51,6 +52,7 @@ export default function JoinRequests() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [descModal, setDescModal] = useState<{isOpen: boolean, text: string, name: string}>({isOpen: false, text: "", name: ""});
   const { toast } = useToast();
 
   function ResumePreview({ id, resumeLink }: { id: string; resumeLink: string }) {
@@ -534,6 +536,24 @@ export default function JoinRequests() {
                         </p>
                       </div>
 
+                      {/* Description / Motivation — shown only when provided */}
+                      {r.description && r.description.trim() && (
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-[#b0a898] uppercase">Brief Description</p>
+                          <p className="text-xs text-[#5a5248] leading-relaxed italic border-l-2 border-teal-200 pl-2">
+                            &ldquo;{r.description.trim().length > 65 ? r.description.trim().substring(0, 65) + '...' : r.description.trim()}&rdquo;
+                            {r.description.trim().length > 65 && (
+                              <button 
+                                onClick={() => setDescModal({ isOpen: true, text: r.description!.trim(), name: r.name })}
+                                className="ml-1.5 text-teal-700 font-bold hover:text-teal-900 hover:underline cursor-pointer inline-flex items-center not-italic"
+                              >
+                                Read More
+                              </button>
+                            )}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="flex justify-end items-center gap-3 pt-6 relative z-30">
                         {r.status === 'pending' || !r.status ? (
                           <>
@@ -623,6 +643,32 @@ export default function JoinRequests() {
           )}
         </div>
       )}
+
+      {/* Description Modal */}
+      <Dialog open={descModal.isOpen} onOpenChange={(isOpen) => setDescModal(prev => ({ ...prev, isOpen }))}>
+        <DialogContent className="w-[95vw] sm:max-w-2xl bg-[#FAF7F2] border-[#EAD8C0] overflow-x-hidden">
+          <DialogTitle className="text-lg font-bold text-[#4a453c] border-b border-[#EAD8C0] pb-3 break-words">
+            Description: {descModal.name}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Full description provided by {descModal.name} in their join request application.
+          </DialogDescription>
+          <div className="py-4 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar">
+            <p className="text-sm text-[#5a5248] leading-relaxed whitespace-pre-wrap break-words italic w-full">
+              &ldquo;{descModal.text}&rdquo;
+            </p>
+          </div>
+          <div className="flex justify-end pt-2 border-t border-[#EAD8C0]">
+            <Button 
+              variant="outline" 
+              onClick={() => setDescModal(prev => ({ ...prev, isOpen: false }))}
+              className="rounded-full border-[#EAD8C0] text-[#5a5248] hover:bg-[#EAD8C0]/30 font-semibold"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
