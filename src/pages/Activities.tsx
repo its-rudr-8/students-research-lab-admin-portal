@@ -245,9 +245,8 @@ export default function Activities() {
         date: formData.date,
         Photo: formData.Photo || null,
       };
-      console.log("[Activities] CREATE payload:", payload);
-      const response = await adminAPI.createActivity(payload);
-      if (response) {
+      const res = await adminApi.post('/admin/activities', payload);
+      if (res) {
         toast({ title: "Activity added successfully" });
         setOpen(false);
         setFormData(EMPTY_FORM());
@@ -294,9 +293,8 @@ export default function Activities() {
         date: editFormData.date,
         Photo: editFormData.Photo || null,
       };
-      console.log("[Activities] UPDATE payload:", payload);
-      const response = await adminAPI.updateActivity(String(editingActivity.id), payload);
-      if (response) {
+      const res = await adminApi.put(`/admin/activities/${editingActivity.id}`, payload);
+      if (res) {
         toast({ title: "Activity updated successfully" });
         setEditOpen(false);
         setEditingActivity(null);
@@ -370,7 +368,6 @@ export default function Activities() {
                 data={formData}
                 set={setFormData}
                 onImageUpload={(url) => {
-                  console.log("[Activities] Add form — image uploaded, url:", url);
                   setFormData((prev) => ({ ...prev, Photo: url }));
                 }}
                 errors={errors}
@@ -399,7 +396,6 @@ export default function Activities() {
               data={editFormData}
               set={setEditFormData}
               onImageUpload={(url) => {
-                console.log("[Activities] Edit form — image uploaded, url:", url);
                 setEditFormData((prev) => ({ ...prev, Photo: url }));
               }}
               errors={editErrors}

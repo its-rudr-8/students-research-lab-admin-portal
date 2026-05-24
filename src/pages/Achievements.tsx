@@ -101,7 +101,6 @@ export default function Achievements() {
       setSubmitting(true);
       // Build media_urls from the uploaded image URL
       const mediaUrlsForCreate = formData.image_url.trim() ? [formData.image_url.trim()] : [];
-      console.log("[Achievements] CREATE payload image_url:", formData.image_url, "| media_urls:", mediaUrlsForCreate);
       const response = await adminAPI.createAchievement({
         title: formData.title.trim(),
         description: formData.description.trim() || null,
@@ -194,7 +193,6 @@ export default function Achievements() {
       setEditSubmitting(true);
       // Build media_urls from the uploaded/existing image URL
       const mediaUrlsForUpdate = editFormData.image_url.trim() ? [editFormData.image_url.trim()] : [];
-      console.log("[Achievements] UPDATE payload image_url:", editFormData.image_url, "| media_urls:", mediaUrlsForUpdate);
       const response = await adminAPI.updateAchievement(String(editingAchievement.id), {
         title: editFormData.title.trim(),
         description: editFormData.description.trim() || null,
