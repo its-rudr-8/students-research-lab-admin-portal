@@ -76,9 +76,8 @@ const apiCall = async (
     const response = await fetch(fullUrl, options);
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-
-      console.error(`[API Error] ${method} ${endpoint} - Status: ${response.status}`, errorData);
+      const errorData = await response.json().catch(() => null);
+      console.error(`[API Error] ${method} ${endpoint} - Status: ${response.status}`);
 
       // Handle 401 - clear token and redirect to login
       if (response.status === 401) {
