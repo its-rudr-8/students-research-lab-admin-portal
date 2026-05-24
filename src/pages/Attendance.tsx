@@ -37,10 +37,125 @@ const formatDateToISO = (date: any): string | null => {
   }
 };
 
+const getPresentStatus = (hours: number | string | null | undefined, attendance: number | string | null | undefined) => {
+  const parsedHours = Number(hours ?? 0);
+  const parsedAttendance = Number(attendance ?? 0);
+
+  return parsedHours > 0 || parsedAttendance > 0;
+};
+
+type AttendanceRow = {
+  id?: number;
+  enrollment_no: string;
+  name: string;
+  initials: string;
+  hours: number;
+  attendance: number;
+  daysPresent: number;
+  profile_image?: string;
+  hasRecord: boolean;
+};
+
+type AttendanceViewMode = "day" | "month";
+
+const MONTH_OPTIONS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const getMonthKey = (value: string | Date) => format(new Date(value), "yyyy-MM");
+
+const getMonthLabel = (monthKey: string) => format(new Date(`${monthKey}-01`), "MMMM yyyy");
+
+const getMonthRows = (records: any[], monthKey: string) =>
+  records.filter((row: any) => String(row.period || "").startsWith(monthKey));
+
+const buildAttendanceRows = (
+  studentsData: any[],
+  attendanceRecords: any[],
+  canEdit: boolean,
+  ownEnrollment: string,
+  filterBy: (row: any) => boolean,
+) => {
+  const attendanceByEnrollment = new Map<string, { row?: any; totalHours: number; totalAttendance: number; recordCount: number; presentPeriods: Set<string> }>();
+
+  attendanceRecords.forEach((row: any) => {
+    const enrollmentNo = String(row.enrollment_no || "");
+    const current = attendanceByEnrollment.get(enrollmentNo) || {
+      row: undefined,
+      totalHours: 0,
+      totalAttendance: 0,
+      recordCount: 0,
+      presentPeriods: new Set<string>(),
+    };
+
+    current.row = current.row || row;
+    current.totalHours += Number(row.hours || 0);
+    current.totalAttendance += Number(row.attendance || 0);
+    current.recordCount += 1;
+    if (getPresentStatus(row.hours, row.attendance)) {
+      current.presentPeriods.add(String(row.period || ""));
+    }
+    attendanceByEnrollment.set(enrollmentNo, current);
+  });
+
+  const stuMap: { [enrollment_no: string]: { name: string; initials: string; profile_image?: string } } = {};
+  studentsData
+    .filter((student: any) => String(student.member_type || "member").toLowerCase() !== "admin")
+    .forEach((s: any) => {
+      if (!canEdit && String(s.enrollment_no || "").trim() !== ownEnrollment) {
+        return;
+      }
+
+      if (!filterBy(s)) {
+        return;
+      }
+
+      stuMap[s.enrollment_no] = {
+        name: s.student_name,
+        initials: s.student_name
+          .split(" ")
+          .map((n: string) => n[0])
+          .join("")
+          .toUpperCase(),
+        profile_image: undefined,
+      };
+    });
+
+  return Object.entries(stuMap).map(([enrollmentNo, details]) => {
+    const summary = attendanceByEnrollment.get(enrollmentNo);
+    const hours = Number(summary?.totalHours || 0);
+    const daysPresent = Number(summary?.presentPeriods?.size || 0);
+
+    return {
+      id: summary?.row ? Number(summary.row.id) : undefined,
+      enrollment_no: enrollmentNo,
+      name: details.name,
+      initials: details.initials,
+      profile_image: details.profile_image,
+      hours,
+      attendance: hours > 0 ? 1 : 0,
+      daysPresent,
+      hasRecord: Number(summary?.recordCount || 0) > 0,
+    } as AttendanceRow;
+  });
+};
+
 export default function Attendance() {
-  const [students, setStudents] = useState<Array<{ id: number; enrollment_no: string; name: string; initials: string; hours: number; attendance: number; profile_image?: string }>>([]);
+  const [students, setStudents] = useState<AttendanceRow[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchName, setSearchName] = useState("");
+  const [viewMode, setViewMode] = useState<AttendanceViewMode>("day");
   const itemsPerPage = 10;
   const [showAddForm, setShowAddForm] = useState(false);
   const [addDate, setAddDate] = useState("");
@@ -49,14 +164,14 @@ export default function Attendance() {
   const [addError, setAddError] = useState("");
   const [loading, setLoading] = useState(true);
   const [attendanceDate, setAttendanceDate] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>(getMonthKey(new Date()));
   const [allDates, setAllDates] = useState<string[]>([]);
   const [cachedAttendanceData, setCachedAttendanceData] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<{ id: number; enrollment_no: string; name: string; hours: number; attendance: number } | null>(null);
+  const [editingStudent, setEditingStudent] = useState<AttendanceRow | null>(null);
   const [editHours, setEditHours] = useState("0");
-  const [editAttendance, setEditAttendance] = useState("0");
   const [updatingAttendance, setUpdatingAttendance] = useState(false);
   const canEdit = hasWriteAccess();
   const currentUser = getStoredUser();
@@ -77,9 +192,8 @@ export default function Attendance() {
         const uniqueDates = Array.from(new Set(attList.map((row: any) => row.period))).sort((a, b) => String(b).localeCompare(String(a))) as string[];
         setAllDates(uniqueDates);
         setCachedAttendanceData(attList);
-        if (uniqueDates.length > 0) {
-          setAttendanceDate(uniqueDates[0]);
-        }
+        setAttendanceDate(uniqueDates.length > 0 ? uniqueDates[0] : format(new Date(), "yyyy-MM-dd"));
+        setSelectedMonth(uniqueDates.length > 0 ? getMonthKey(uniqueDates[0]) : getMonthKey(new Date()));
 
         setCachedStudentsData(parseList(stuResponse));
 
@@ -104,57 +218,44 @@ export default function Attendance() {
     return () => es.close();
   }, []);
 
-  // Process data for selected date - uses cached data
+  // Process data for selected date/month - uses cached data
   useEffect(() => {
-    if (!attendanceDate || cachedAttendanceData.length === 0) return;
+    if (viewMode === "day" && !attendanceDate) return;
 
     try {
-      const attData = cachedAttendanceData.filter((row: any) => row.period === attendanceDate);
-      const stuData = cachedStudentsData;
+      if (viewMode === "day") {
+        const attData = cachedAttendanceData.filter((row: any) => row.period === attendanceDate);
+        setStudents(
+          buildAttendanceRows(
+            cachedStudentsData,
+            attData,
+            canEdit,
+            ownEnrollment,
+            () => true,
+          ),
+        );
+        return;
+      }
 
-      const stuMap: { [enrollment_no: string]: { name: string; initials: string; profile_image?: string } } = {};
-      stuData
-        .filter((student: any) => String(student.member_type || "member").toLowerCase() !== "admin")
-        .forEach((s: any) => {
-          if (!canEdit && String(s.enrollment_no || "").trim() !== ownEnrollment) {
-            return;
-          }
-
-          stuMap[s.enrollment_no] = {
-            name: s.student_name,
-            initials: s.student_name
-              .split(" ")
-              .map((n: string) => n[0])
-              .join("")
-              .toUpperCase(),
-            profile_image: undefined,
-          };
-        });
-
-      const studentsList = attData
-        .filter((row: any) => stuMap[row.enrollment_no])
-        .map((row: any) => {
-          const details = stuMap[row.enrollment_no];
-          return {
-            id: Number(row.id),
-            enrollment_no: row.enrollment_no,
-            name: details ? details.name : row.enrollment_no,
-            initials: details ? details.initials : row.enrollment_no.slice(0, 2).toUpperCase(),
-            profile_image: details?.profile_image,
-            hours: Number(row.hours || 0),
-            attendance: Number(row.attendance || 0),
-          };
-        });
-      setStudents(studentsList);
+      const monthRecords = getMonthRows(cachedAttendanceData, selectedMonth);
+      setStudents(
+        buildAttendanceRows(
+          cachedStudentsData,
+          monthRecords,
+          canEdit,
+          ownEnrollment,
+          () => true,
+        ),
+      );
     } catch (error) {
       console.error("Error processing attendance data:", error);
     }
-  }, [attendanceDate, cachedAttendanceData]);
+  }, [attendanceDate, cachedAttendanceData, cachedStudentsData, canEdit, ownEnrollment, selectedMonth, viewMode]);
 
   // Reset to page 1 when attendance date changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [attendanceDate]);
+  }, [attendanceDate, selectedMonth, viewMode]);
 
   const handleAddAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,41 +311,32 @@ export default function Attendance() {
     setAdding(false);
   };
 
-  const handleOpenEdit = (student: { id: number; enrollment_no: string; name: string; hours: number; attendance: number }) => {
+  const handleOpenEdit = (student: AttendanceRow) => {
     setEditingStudent(student);
     setEditHours(String(Number(student.hours || 0)));
-    setEditAttendance(String(Number(student.attendance || 0)));
     setIsEditOpen(true);
   };
 
   const handleUpdateAttendance = async () => {
     if (!editingStudent || !canEdit) return;
     const parsedHours = Number(editHours);
-    const parsedAttendance = Number(editAttendance);
 
     if (Number.isNaN(parsedHours) || parsedHours < 0) {
       toast({ variant: "destructive", title: "Invalid hours", description: "Hours must be 0 or greater." });
       return;
     }
-    if (Number.isNaN(parsedAttendance) || parsedAttendance < 0) {
-      toast({ variant: "destructive", title: "Invalid attendance", description: "Attendance must be 0 or greater." });
+    if (!attendanceDate) {
+      toast({ variant: "destructive", title: "Missing date", description: "Select an attendance date first." });
       return;
     }
 
     try {
       setUpdatingAttendance(true);
-      await adminAPI.updateAttendance(String(editingStudent.id), {
+      await adminAPI.markAttendance({
+        enrollment_no: editingStudent.enrollment_no,
+        date: attendanceDate,
         hours: parsedHours,
-        attendance: parsedAttendance,
       });
-
-      setCachedAttendanceData((prev) =>
-        prev.map((row: any) =>
-          Number(row.id) === editingStudent.id
-            ? { ...row, hours: parsedHours, attendance: parsedAttendance }
-            : row,
-        ),
-      );
 
       toast({ title: "Attendance updated" });
       setIsEditOpen(false);
@@ -383,22 +475,75 @@ export default function Attendance() {
         <h2 className="text-base sm:text-lg font-semibold text-stone-800 shrink-0">
           Attendance for
         </h2>
-        <div className="pt-2">
-          <Calendar
-            mode="single"
-            selected={attendanceDate ? new Date(attendanceDate) : undefined}
-            onSelect={(date) => setAttendanceDate(date ? format(date, "yyyy-MM-dd") : null)}
-            disabled={{ after: new Date() }}
-            className="bg-[#FAF7F2] border-2 border-[#EAD8C0] rounded-xl"
-            classNames={{
-              day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
-              day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
-              day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
-              head_cell: "text-[#8B735B] font-bold",
-              cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
-            }}
-          />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant={viewMode === "day" ? "default" : "outline"}
+            onClick={() => setViewMode("day")}
+            className={viewMode === "day" ? "bg-teal-700 hover:bg-teal-800 text-white" : "border-[#EAD8C0]/60 text-stone-700"}
+          >
+            Day View
+          </Button>
+          <Button
+            type="button"
+            variant={viewMode === "month" ? "default" : "outline"}
+            onClick={() => setViewMode("month")}
+            className={viewMode === "month" ? "bg-teal-700 hover:bg-teal-800 text-white" : "border-[#EAD8C0]/60 text-stone-700"}
+          >
+            Month View
+          </Button>
         </div>
+        {viewMode === "day" ? (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "min-w-[220px] justify-between border-2 border-[#EAD8C0]/60 bg-white/90 px-4 py-2 text-left font-medium text-stone-700 shadow-sm hover:bg-[#FAF7F2]",
+                  !attendanceDate && "text-muted-foreground",
+                )}
+              >
+                {attendanceDate ? format(new Date(attendanceDate), "do MMMM yyyy") : <span>Select a date</span>}
+                <CalendarIcon className="ml-2 h-4 w-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 border-none shadow-2xl" align="start">
+              <Calendar
+                mode="single"
+                selected={attendanceDate ? new Date(attendanceDate) : undefined}
+                onSelect={(date) => setAttendanceDate(date ? format(date, "yyyy-MM-dd") : null)}
+                disabled={{ after: new Date() }}
+                initialFocus
+                className="bg-[#FAF7F2] border-2 border-[#EAD8C0]/50 rounded-xl"
+                classNames={{
+                  day_selected: "!bg-[#EAD8C0] !text-[#8B735B] hover:!bg-[#d4bc9a] focus:!bg-[#EAD8C0]",
+                  day_today: "bg-white text-[#8B735B] font-bold border border-[#EAD8C0]",
+                  day: "hover:!bg-[#EAD8C0]/20 rounded-md transition-colors",
+                  head_cell: "text-[#8B735B] font-bold",
+                  cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected])]:!bg-transparent focus-within:relative focus-within:z-20",
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="min-w-[220px] justify-between border-2 border-[#EAD8C0]/60 bg-white/90 px-4 py-2 text-left font-medium text-stone-700 shadow-sm hover:bg-[#FAF7F2]"
+              >
+                {getMonthLabel(selectedMonth)}
+                <CalendarIcon className="ml-2 h-4 w-4 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[320px] p-4 border-2 border-[#EAD8C0]/50 shadow-2xl bg-[#FAF7F2]" align="start">
+              <MonthPicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col lg:flex-row gap-6">
         <div className="w-full lg:max-w-3xl flex-1">
@@ -411,9 +556,13 @@ export default function Attendance() {
                   {/* Header Row */}
                   <div className="flex border-b border-[#EAD8C0]/50 bg-[#EAD8C0]/40">
                     <div className="flex-1 text-left text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Student</div>
-                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Present</div>
-                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Hours</div>
-                    {canEdit && <div className="w-24 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Edit</div>}
+                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">
+                      {viewMode === "month" ? "Days Present" : "Present"}
+                    </div>
+                    <div className="flex-1 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">
+                      {viewMode === "month" ? "Total Hours" : "Hours"}
+                    </div>
+                    {canEdit && viewMode === "day" && <div className="w-24 text-center text-xs font-bold text-[#8B735B] uppercase tracking-wider py-2 px-2">Edit</div>}
                   </div>
                   {/* Data Rows */}
                   {students.length === 0 ? (
@@ -424,7 +573,7 @@ export default function Attendance() {
                       const endIdx = startIdx + itemsPerPage;
                       const paginatedStudents = students.slice(startIdx, endIdx);
                       return paginatedStudents.map((student, i) => {
-                        const present = Number(student.attendance || 0) > 0 || Number(student.hours || 0) > 0;
+                        const present = getPresentStatus(student.hours, student.attendance);
                         return (
                           <motion.div key={student.enrollment_no} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="flex border-b border-[#EAD8C0]/20 last:border-0 hover:bg-[#EAD8C0]/5 transition-colors">
                             <div className="flex-1 py-2 px-2 bg-white flex items-center gap-1">
@@ -438,7 +587,11 @@ export default function Attendance() {
                               <span className="text-sm font-medium text-foreground">{student.name}</span>
                             </div>
                             <div className="flex-1 py-2 px-2 flex items-center justify-center">
-                              {present ? (
+                              {viewMode === "month" ? (
+                                <span className="px-2.5 py-0.5 bg-teal-100 text-teal-700 rounded-full text-xs font-medium">
+                                  {student.daysPresent} day{student.daysPresent === 1 ? "" : "s"}
+                                </span>
+                              ) : present ? (
                                 <span className="px-2.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Present</span>
                               ) : (
                                 <span className="px-2.5 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">Absent</span>
@@ -447,7 +600,7 @@ export default function Attendance() {
                             <div className="flex-1 py-2 px-2 text-center">
                               <span className="inline-block bg-[#EAD8C0]/30 px-2 py-0.5 rounded text-sm font-bold text-[#8B735B]">{Number(student.hours).toFixed(1)}</span>
                             </div>
-                            {canEdit && (
+                            {canEdit && viewMode === "day" && (
                               <div className="w-24 py-2 px-2 text-center">
                                 <Button
                                   variant="ghost"
@@ -456,7 +609,7 @@ export default function Attendance() {
                                   onClick={() => handleOpenEdit(student)}
                                 >
                                   <Pencil className="w-4 h-4 mr-1" />
-                                  Edit
+                                  {student.hasRecord ? "Edit" : "Add"}
                                 </Button>
                               </div>
                             )}
@@ -524,28 +677,19 @@ export default function Attendance() {
               <p className="font-semibold">{editingStudent?.name}</p>
               <p className="text-xs text-muted-foreground">{editingStudent?.enrollment_no}</p>
               <p className="text-xs text-muted-foreground">Date: {attendanceDate || "-"}</p>
+              <p className="text-xs text-muted-foreground">
+                Status: {Number(editHours || 0) > 0 ? "Present" : "Absent"}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-stone-700">Hours</label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={editHours}
-                  onChange={(e) => setEditHours(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-stone-700">Attendance</label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={editAttendance}
-                  onChange={(e) => setEditAttendance(e.target.value)}
-                />
-              </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-stone-700">Hours</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.5"
+                value={editHours}
+                onChange={(e) => setEditHours(e.target.value)}
+              />
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={updatingAttendance}>Cancel</Button>
@@ -556,6 +700,54 @@ export default function Attendance() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const currentMonth = Number(value.split("-")[1] || new Date().getMonth() + 1) - 1;
+  const currentYear = Number(value.split("-")[0] || new Date().getFullYear());
+
+  const [year, setYear] = useState(currentYear);
+
+  useEffect(() => {
+    setYear(currentYear);
+  }, [currentYear]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Button variant="outline" size="sm" onClick={() => setYear((y) => y - 1)} className="border-[#EAD8C0]/60 text-stone-700">
+          ←
+        </Button>
+        <div className="font-semibold text-stone-800">{year}</div>
+        <Button variant="outline" size="sm" onClick={() => setYear((y) => y + 1)} className="border-[#EAD8C0]/60 text-stone-700">
+          →
+        </Button>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {MONTH_OPTIONS.map((month, index) => {
+          const monthValue = `${year}-${String(index + 1).padStart(2, "0")}`;
+          const active = monthValue === value;
+
+          return (
+            <button
+              key={month}
+              type="button"
+              onClick={() => onChange(monthValue)}
+              className={cn(
+                "rounded-lg border px-2 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "border-teal-700 bg-teal-700 text-white"
+                  : "border-[#EAD8C0]/50 bg-white text-stone-700 hover:bg-[#EAD8C0]/20",
+              )}
+            >
+              {month.slice(0, 3)}
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-xs text-muted-foreground text-center">Select a month to view cumulative attendance hours.</div>
     </div>
   );
 }
