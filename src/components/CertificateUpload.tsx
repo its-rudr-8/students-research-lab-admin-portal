@@ -44,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminAPI } from "@/lib/adminApi";
 import { processCertificateFile, SUPPORTED_TYPES } from "@/lib/certificateUpload";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ export default function CertificateUpload({
     certifications.map(certItemFromCert)
   );
   const [isDragging, setIsDragging] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -153,6 +155,7 @@ export default function CertificateUpload({
 
   // ── Add empty (manual entry) ──────────────────────────────────────────────
   const handleAddEmpty = useCallback(() => {
+    setIsExpanded(true); // Automatically expand list when manually adding
     const newItem: CertItem = { id: newId(), name: "", url: "", uploading: false };
     // Do NOT notify parent yet — user hasn't typed anything meaningful
     setItems(prev => [...prev, newItem]);
@@ -169,6 +172,8 @@ export default function CertificateUpload({
   const uploadFiles = useCallback(async (files: FileList, insertAtId?: string) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
+
+    setIsExpanded(true); // Automatically expand list when files are uploaded
 
     // 1. Create placeholder items and insert them
     const placeholders: CertItem[] = fileArray.map(f => ({
@@ -294,18 +299,54 @@ export default function CertificateUpload({
 
       {/* Certificate cards */}
       {items.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {items.map(item => (
-            <CertCard
-              key={item.id}
-              item={item}
-              disabled={disabled}
-              onNameCommit={handleNameCommit}
-              onUrlCommit={handleUrlCommit}
-              onRemove={handleRemove}
-              onReplace={handleReplaceClick}
-            />
-          ))}
+        <div className="space-y-4">
+          <motion.div layout="position" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {items.map((item, idx) => {
+              const isHidden = idx >= 2;
+              return (
+                <AnimatePresence key={item.id} initial={false}>
+                  {(!isHidden || isExpanded) && (
+                    <motion.div
+                      layout
+                      initial={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      className="w-full"
+                    >
+                      <CertCard
+                        item={item}
+                        disabled={disabled}
+                        onNameCommit={handleNameCommit}
+                        onUrlCommit={handleUrlCommit}
+                        onRemove={handleRemove}
+                        onReplace={handleReplaceClick}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              );
+            })}
+          </motion.div>
+
+          {/* Show More / Show Less button */}
+          {items.length > 2 && (
+            <div className="flex justify-center pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-[#2A5D4B] hover:text-[#21493A] hover:bg-[#2A5D4B]/10 font-bold flex items-center gap-1.5 rounded-full px-4"
+              >
+                {isExpanded ? (
+                  <>Show Less</>
+                ) : (
+                  <>Show More ({items.length - 2} more)</>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -345,7 +386,7 @@ export default function CertificateUpload({
                 {anyUploading ? "Uploading certificates..." : "Drop certificates here or click to browse"}
               </p>
               <p className="text-[11px] text-[#8B735B]/60 mt-0.5 font-medium uppercase tracking-wider">
-                Supports JPG, PNG, WebP, PDF (first page) · up to 10MB each · multiple allowed
+                Supports JPG, PNG, WebP, PDF · up to 10MB each · multiple allowed
               </p>
             </div>
           </div>

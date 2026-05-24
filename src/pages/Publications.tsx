@@ -961,16 +961,16 @@ export default function Publications() {
                   <div className="space-y-2">
                     <Label className="text-[#8B735B] font-bold">Department</Label>
                     <Input
-                      placeholder="Department"
+                    placeholder="CE, IT (comma-separated)"
                       className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                       value={formData.department}
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-[#8B735B] font-bold">Institute</Label>
+                    <Label className="text-[#8B735B] font-bold">Institution</Label>
                     <Input
-                      placeholder="Institute name"
+                      placeholder="Institute name (comma-separated)"
                       className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                       value={formData.institute}
                       onChange={(e) => setFormData({ ...formData, institute: e.target.value })}
@@ -1559,16 +1559,16 @@ export default function Publications() {
                 <div className="space-y-2">
                   <Label className="text-[#8B735B] font-bold">Department</Label>
                   <Input
-                    placeholder="Department"
+                    placeholder="CE, IT (comma-separated)"
                     className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     value={editFormData.department}
                     onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[#8B735B] font-bold">Institute</Label>
+                  <Label className="text-[#8B735B] font-bold">Institution</Label>
                   <Input
-                    placeholder="Institute name"
+                    placeholder="Institute name (comma-separated)"
                     className="rounded-xl border-[#EAD8C0]/40 bg-white focus:border-[#EAD8C0] focus:ring-1 focus:ring-[#EAD8C0]"
                     value={editFormData.institute}
                     onChange={(e) => setEditFormData({ ...editFormData, institute: e.target.value })}

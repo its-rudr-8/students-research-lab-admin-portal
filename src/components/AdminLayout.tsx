@@ -110,18 +110,19 @@ export default function AdminLayout() {
         description: "Session cleared successfully.",
       });
       navigate("/login", { replace: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as Error;
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || "Failed to logout",
+        description: err.message || "Failed to logout",
       });
     }
   };
 
   return (
     <ConfirmProvider>
-      <div className="relative flex min-h-dvh w-full bg-background">
+      <div className="relative flex h-screen w-full bg-background overflow-hidden">
       {/* Mobile overlay when sidebar is open */}
       <AnimatePresence>
         {sidebarOpen && !isDesktop && (
@@ -138,34 +139,59 @@ export default function AdminLayout() {
       {/* Sidebar - Hidden on mobile unless opened */}
       <motion.aside
         initial={false}
-        animate={{ width: isDesktop ? (sidebarOpen ? 260 : 72) : sidebarOpen ? 260 : 0 }}
+        animate={{
+          width: isDesktop ? (sidebarOpen ? 260 : 72) : 260,
+          x: isDesktop ? 0 : (sidebarOpen ? 0 : -260)
+        }}
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-        className={`flex flex-col border-r border-border bg-sidebar h-screen shrink-0 z-30 ${isDesktop ? "sticky top-0 self-start" : "fixed top-0 left-0"}`}
+        className="flex flex-col border-r border-border bg-sidebar h-screen shrink-0 z-30 shadow-xl lg:shadow-none fixed lg:sticky top-0 left-0 lg:left-auto lg:self-start"
       >
-        {/* Logo */}
-        <NavLink to="/" end className="flex items-center gap-3 px-4 h-16 border-b border-border shrink-0">
-          <img src="/SRL Logo.svg" alt="SRL Logo" className="w-10 h-10 rounded-xl flex-shrink-0" />
-          <AnimatePresence>
-            {sidebarOpen && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="overflow-hidden whitespace-nowrap"
-              >
-                <span className="text-sm font-bold text-foreground leading-tight block truncate max-w-[160px]">
-                  {user?.role === "admin" ? "SRL Admin" : user?.name || "SRL Student"}
-                </span>
-                <span className="block text-[10px] text-muted-foreground font-semibold tracking-wider uppercase">
-                  {user?.role === "admin" ? "MMPSRPC, KSV" : "SRL Student Member"}
-                </span>
+        {/* Sidebar Header with Logo and Collapse Toggle */}
+        <div className="relative flex items-center border-b border-border shrink-0 h-16 px-4 justify-between">
+          <NavLink
+            to="/"
+            end
+            className="flex items-center gap-3"
+          >
+            <img src="/SRL Logo.svg" alt="SRL Logo" className="w-10 h-10 rounded-xl flex-shrink-0" />
+            <AnimatePresence>
+              {sidebarOpen && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  <span className="text-sm font-bold text-foreground leading-tight block truncate max-w-[160px]">
+                    {user?.role === "admin" ? "SRL Admin" : user?.name || "SRL Student"}
+                  </span>
+                  <span className="block text-[10px] text-muted-foreground font-semibold tracking-wider uppercase">
+                    {user?.role === "admin" ? "MMPSRPC, KSV" : "SRL Student Member"}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </NavLink>
+
+          {isDesktop && (
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className={`inline-flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-all duration-200 ${
+                sidebarOpen 
+                  ? "h-8 w-8" 
+                  : "absolute -right-3 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-background border border-border shadow-md z-50"
+              }`}
+              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              <motion.div animate={{ rotate: sidebarOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <ChevronRight className="w-4 h-4" />
               </motion.div>
-            )}
-          </AnimatePresence>
-        </NavLink>
+            </button>
+          )}
+        </div>
 
         {/* Nav Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
           {allNavItems
             .filter((item) => !item.requiresAdmin || hasWriteAccess())
             .map((item) => (
@@ -174,7 +200,9 @@ export default function AdminLayout() {
               to={item.path}
               end={item.path === "/"}
               className={({ isActive }) =>
-                `sidebar-item ${isActive ? "active" : ""}`
+                `sidebar-item transition-all duration-300 ease-in-out ${isActive ? "active" : ""} ${
+                  sidebarOpen ? "px-3 justify-start" : "px-[27px] justify-start"
+                }`
               }
             >
               <item.icon className="w-[18px] h-[18px] shrink-0" />
@@ -194,33 +222,36 @@ export default function AdminLayout() {
           ))}
         </nav>
 
-        {/* Footer with Logout and Collapse button */}
-        <div className="mt-auto border-t border-border bg-sidebar space-y-1 p-2">
+        {/* Footer with Logout */}
+        <div className="mt-auto border-t border-border bg-sidebar p-2 shrink-0">
           <Button
             onClick={handleLogout}
             variant="ghost"
             size="sm"
-            className="w-full justify-start text-muted-foreground hover:text-destructive gap-2 rounded-lg"
+            className={`w-full text-muted-foreground hover:text-destructive gap-2 rounded-lg transition-all duration-300 ease-in-out ${
+              sidebarOpen ? "justify-start px-3" : "justify-start px-[20px]"
+            }`}
+            title={sidebarOpen ? "" : "Sign Out"}
           >
-            <LogOut className="w-4 h-4" />
-            {sidebarOpen && <span>Sign Out</span>}
+            <LogOut className="w-4 h-4 shrink-0" />
+            <AnimatePresence>
+              {sidebarOpen && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="overflow-hidden whitespace-nowrap"
+                >
+                  Sign Out
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Button>
-          {isDesktop && (
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="w-full inline-flex h-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-            >
-              <motion.div animate={{ rotate: sidebarOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                <ChevronRight className="w-4 h-4" />
-              </motion.div>
-            </button>
-          )}
         </div>
       </motion.aside>
 
       {/* Main content area */}
-      <div className="flex flex-col flex-1 min-w-0 relative z-10">
+      <div className="flex flex-col flex-1 min-w-0 h-screen overflow-hidden relative z-10">
         {/* Header */}
         <header className="sticky top-0 z-20 flex items-center justify-between h-14 sm:h-16 px-3 sm:px-6 border-b border-border/70 bg-card/65 backdrop-blur-md shrink-0 gap-2 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
@@ -249,7 +280,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Page content */}
-        <main data-scroll-container="app-main" className="flex-1 overflow-x-hidden p-2 sm:p-3">
+        <main data-scroll-container="app-main" className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
