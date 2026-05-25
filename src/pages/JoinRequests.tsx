@@ -484,8 +484,8 @@ export default function JoinRequests() {
                         <p className="text-sm font-semibold text-[#5a5248]">{r.semester}{r.division ? ` (Div ${r.division})` : ""}</p>
                       </div>
                       <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Branch</p>
-                        <p className="text-sm font-semibold text-[#5a5248]">{r.branch}</p>
+                        <p className="text-[10px] font-bold text-[#b0a898] uppercase">Department / Course</p>
+                        <p className="text-sm font-semibold text-[#5a5248]">{r.department || r.branch || "-"}</p>
                       </div>
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-[#b0a898] uppercase">College</p>
