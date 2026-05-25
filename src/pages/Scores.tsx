@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Plus, Clock, Star, ChevronLeft, ChevronRight, Pencil, Trash2, X, Search, Loader2, Medal, CalendarIcon } from "lucide-react";
+import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import StudentAvatar from "@/components/StudentAvatar";
 import * as XLSX from "xlsx";
 import { hasWriteAccess } from "@/lib/auth";
@@ -68,9 +69,10 @@ export default function Scores() {
   const [monthOptions, setMonthOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [sessionScores, setSessionScores] = useState<SessionScoreRow[]>([]);
+  const [selectedPanelStudent, setSelectedPanelStudent] = useState<string>("");
   const [cachedLeaderboardStats, setCachedLeaderboardStats] = useState<any[]>([]);
   const [cachedStudentsData, setCachedStudentsData] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<"cumulative" | "monthly" | "contributors">("cumulative");
+  const [viewMode, setViewMode] = useState<"cumulative" | "weekly" | "monthly" | "contributors">("cumulative");
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -129,6 +131,16 @@ export default function Scores() {
   const [adding, setAdding] = useState(false);
 
   const normalizeText = (value: unknown) => String(value || "").trim();
+
+  const isWithinLast7Days = (dateText: string) => {
+    if (!dateText) return false;
+    const parsed = new Date(`${dateText}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return false;
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    since.setHours(0, 0, 0, 0);
+    return parsed >= since;
+  };
 
   const toDateKey = (year: number, month: number, day: number) => {
     const pad = (value: number) => String(value).padStart(2, "0");
@@ -305,6 +317,45 @@ export default function Scores() {
       const agg = new Map<string, ScoreRow>();
       
       let stats: any[] = [];
+      if (viewMode === "weekly") {
+        const weeklyAgg = new Map<string, ScoreRow>();
+
+        sessionScores
+          .filter((session) => isWithinLast7Days(session.date || ""))
+          .forEach((session) => {
+            (session.scoreEntries || []).forEach((entry) => {
+              const enr = normalizeText(entry.enrollment_no);
+              if (!enr) return;
+
+              const stu = nameMap.get(enr) || {};
+              const name = normalizeText(stu.student_name) || enr;
+              const scoreValue = Number(entry.score || 0);
+
+              if (!weeklyAgg.has(enr)) {
+                weeklyAgg.set(enr, {
+                  id: enr,
+                  enrollment_no: enr,
+                  points: scoreValue,
+                  name,
+                  initials: name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2),
+                  profile_image: stu.profile_image || stu.photo_url,
+                  hours: 0,
+                  batch: stu.batch,
+                  department: stu.department,
+                });
+              } else {
+                const existing = weeklyAgg.get(enr)!;
+                existing.points += scoreValue;
+              }
+            });
+          });
+
+        const rows = Array.from(weeklyAgg.values());
+        rows.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+        setScores(rows);
+        return;
+      }
+
       if (viewMode === "cumulative") {
         const currentAcadYear = getCurrentAcademicYear();
         const previousAcadYear = currentAcadYear - 1;
@@ -359,7 +410,7 @@ export default function Scores() {
       rows.sort((a, b) => viewMode === "contributors" ? (b.hours || 0) - (a.hours || 0) : b.points - a.points);
       setScores(rows);
     } catch (e) { console.error(e); }
-  }, [viewMode, selectedMonth, cachedLeaderboardStats, cachedStudentsData]);
+  }, [viewMode, selectedMonth, cachedLeaderboardStats, cachedStudentsData, sessionScores]);
 
   const studentNameByEnrollment = useMemo(() => {
     const map = new Map<string, string>();
@@ -412,13 +463,13 @@ export default function Scores() {
       return;
     }
 
-    if (!selectedSessionDate || !sessionDateOptions.includes(selectedSessionDate)) {
-      setSelectedSessionDate(sessionDateOptions[0]);
+    if (selectedSessionDate && !sessionDateOptions.includes(selectedSessionDate)) {
+      setSelectedSessionDate("");
     }
   }, [sessionDateOptions, selectedSessionDate, focusLatestSession]);
 
   const selectedSessionGroup = useMemo(() => {
-    return groupedSessionScores.find((group) => group.date === selectedSessionDate) || groupedSessionScores[0] || null;
+    return groupedSessionScores.find((group) => group.date === selectedSessionDate) || null;
   }, [groupedSessionScores, selectedSessionDate]);
 
   const sessionEventOptions = useMemo(() => {
@@ -542,7 +593,82 @@ export default function Scores() {
       .filter((group) => group.sessions.length > 0);
   }, [selectedEventGroups, sessionSearch, sessionSort, studentNameByEnrollment, selectedSessionRound]);
 
+  const sessionFiltersApplied = Boolean(
+    normalizeText(selectedSessionDate) ||
+    selectedSessionEvent !== "all" ||
+    selectedSessionRound !== "all" ||
+    normalizeText(sessionSearch)
+  );
+
   const paged = scores.slice((currentPage - 1) * PG, currentPage * PG);
+
+  // Last 7 distinct session dates present in sessionScores (oldest -> newest)
+  const weeklyDateSeries = useMemo(() => {
+    const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const datesSet = new Set<string>();
+    sessionScores.forEach((s) => { if (s.date) datesSet.add(s.date); });
+    const dates = Array.from(datesSet).filter(d => d).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const last7 = dates.slice(-7);
+    return last7.map(d => ({ date: d, label: labels[new Date(d + 'T00:00:00').getDay()] }));
+  }, [sessionScores]);
+
+  const weeklyLeaderboard = useMemo(() => {
+    const nameMap = new Map<string, any>();
+    cachedStudentsData.forEach((s: any) => { const e = normalizeText(s.enrollment_no); if (e) nameMap.set(e, s); });
+    const agg = new Map<string, { enrollment_no: string; name: string; image?: string; batch?: string; score: number; dayScores: Map<string, number> }>();
+
+    sessionScores
+      .filter((session) => weeklyDateSeries.some(d => d.date === (session.date || "")))
+      .forEach((session) => {
+        const dateKey = session.date || "";
+        const scoresObj = session.scores && typeof session.scores === "object" ? session.scores : {};
+        Object.entries(scoresObj).forEach(([enr, val]) => {
+          const key = normalizeText(enr);
+          if (!key) return;
+          const score = Number(val) || 0;
+          if (!agg.has(key)) {
+            const stu = nameMap.get(key) || {};
+            agg.set(key, { enrollment_no: key, name: normalizeText(stu.student_name) || key, image: stu.profile_image || stu.photo_url || "", batch: stu.batch, score: 0, dayScores: new Map() });
+          }
+          const entry = agg.get(key)!;
+          entry.score += score;
+          entry.dayScores.set(dateKey, (entry.dayScores.get(dateKey) || 0) + score);
+        });
+      });
+
+    return Array.from(agg.values()).sort((a, b) => b.score - a.score).map((e, idx) => ({ ...e, rank: idx + 1, progress: weeklyDateSeries.map(d => ({ ...d, score: e.dayScores.get(d.date) || 0 })) }));
+  }, [sessionScores, cachedStudentsData, weeklyDateSeries]);
+
+  const overallWeeklyTotals = useMemo(() => {
+    const totals = new Map<string, number>();
+    weeklyDateSeries.forEach(d => totals.set(d.date, 0));
+    sessionScores.forEach(session => {
+      const dateKey = session.date || "";
+      if (!totals.has(dateKey)) return;
+      const scoresObj = session.scores && typeof session.scores === 'object' ? session.scores : {};
+      Object.values(scoresObj).forEach(v => { totals.set(dateKey, (totals.get(dateKey) || 0) + (Number(v) || 0)); });
+    });
+    return weeklyDateSeries.map(d => ({ ...d, total: totals.get(d.date) || 0 }));
+  }, [sessionScores, weeklyDateSeries]);
+
+  const selectedPanelProgress = useMemo(() => {
+    if (!selectedPanelStudent) return [];
+    const dayMap = new Map<string, number>();
+    sessionScores.forEach((session) => {
+      const dateKey = session.date || "";
+      if (!weeklyDateSeries.some(d => d.date === dateKey)) return;
+      const s = Number(session.scores?.[selectedPanelStudent] || 0);
+      if (!s) return;
+      dayMap.set(dateKey, (dayMap.get(dateKey) || 0) + s);
+    });
+    return weeklyDateSeries.map(d => ({ ...d, score: dayMap.get(d.date) || 0 }));
+  }, [sessionScores, selectedPanelStudent, weeklyDateSeries]);
+
+  const selectedPanelSummary = useMemo(() => {
+    const total = selectedPanelProgress.reduce((s, d) => s + Number(d.score || 0), 0);
+    const best = selectedPanelProgress.reduce((best, d) => (Number(d.score || 0) > Number(best.score || 0) ? d : best), selectedPanelProgress[0] || { label: '', score: 0 });
+    return { total, bestDay: best };
+  }, [selectedPanelProgress]);
 
   const handleEditClick = (score: ScoreRow) => {
     setEditingScore(score);
@@ -873,8 +999,9 @@ export default function Scores() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, gap: 14, flexWrap: "wrap", flexShrink: 0 }}>
         <div style={{ display: "inline-flex", gap: 5, padding: 6, borderRadius: 50, background: "linear-gradient(135deg,#eae6dc,#f2ede4)", border: "1px solid #d8d2c6", boxShadow: "inset 0 1.5px 4px rgba(0,0,0,0.08)" }}>
           {[
+            { id: "weekly", label: "Weekly", icon: <Clock size={14} /> },
+            { id: "monthly", label: "Monthly", icon: <Star size={14} /> },
             { id: "cumulative", label: "All-Time", icon: <Trophy size={14} /> },
-            { id: "monthly", label: "Monthly", icon: <Star size={14} /> }
           ].map(m => {
             const active = viewMode === m.id;
             return (
@@ -893,16 +1020,18 @@ export default function Scores() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
-            <SelectTrigger style={{ height: 42, padding: "0 16px", borderRadius: 50, border: "1.5px solid #dde8e2", background: "#f8fdfb", fontSize: "0.875rem", fontWeight: 600, color: "#1e1e18", width: 160 }}>
-              <SelectValue placeholder="Month" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl border-slate-100 shadow-xl">
-              {monthOptions.map(m => (
-                <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {viewMode === "monthly" && (
+            <Select value={selectedMonth || ""} onValueChange={setSelectedMonth}>
+              <SelectTrigger style={{ height: 42, padding: "0 16px", borderRadius: 50, border: "1.5px solid #dde8e2", background: "#f8fdfb", fontSize: "0.875rem", fontWeight: 600, color: "#1e1e18", width: 160 }}>
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border-slate-100 shadow-xl">
+                {monthOptions.map(m => (
+                  <SelectItem key={m} value={m} className="font-bold">{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {hasWriteAccess() && (
             <div style={{ display: 'inline-flex', gap: 8 }}>
@@ -1033,11 +1162,11 @@ export default function Scores() {
         </DialogContent>
       </Dialog>
 
-        {!loading && selectedSessionGroup && (
+        {!loading && sessionDateOptions.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }} style={{ marginTop: 18, background: "#fff", borderRadius: 18, border: "1.5px solid #e0dbd2", boxShadow: "0 6px 32px rgba(26,74,52,0.08)", overflow: "hidden" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid #efe9df", background: "linear-gradient(90deg,#fbfaf7,#f7f5ef)" }}>
               <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#1a1810" }}>Session Scores by Date and Event</h3>
-              <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "#7d7265" }}>Pick a date first. Event is optional, and rounds appear only when the selected event has round-wise data.</p>
+              <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "#7d7265" }}>Pick a date or apply a filter to load the session scores. Event is optional, and rounds appear only when the selected event has round-wise data.</p>
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "14px 20px", borderBottom: "1px solid #efe9df", background: "#fff" }}>
               <div style={{ width: 220 }}>
@@ -1100,17 +1229,23 @@ export default function Scores() {
               </div>
             </div>
             <div style={{ maxHeight: 520, overflowY: "auto", padding: 18 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-                <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "#edf6f0", color: "#1e5c42", fontSize: "0.78rem", fontWeight: 800 }}>
-                  {selectedSessionGroup.date}
-                </span>
-                <span style={{ fontSize: "0.78rem", color: "#7d7265", fontWeight: 600 }}>
-                  {selectedEventGroups.length} event{selectedEventGroups.length === 1 ? "" : "s"}
-                </span>
-              </div>
+              {!sessionFiltersApplied || !selectedSessionGroup ? (
+                <div style={{ padding: 16, borderRadius: 14, background: "#faf7f1", border: "1px dashed #e5dac8", color: "#7d7265", fontSize: "0.88rem", fontWeight: 600 }}>
+                  Apply a session filter to view scores.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", padding: "5px 12px", borderRadius: 999, background: "#edf6f0", color: "#1e5c42", fontSize: "0.78rem", fontWeight: 800 }}>
+                      {selectedSessionGroup.date}
+                    </span>
+                    <span style={{ fontSize: "0.78rem", color: "#7d7265", fontWeight: 600 }}>
+                      {selectedEventGroups.length} event{selectedEventGroups.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {visibleEventGroups.map((eventGroup) => (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {visibleEventGroups.map((eventGroup) => (
                   <div key={eventGroup.type} style={{ padding: 14, borderRadius: 14, background: "#fbfaf7", border: "1px solid #efe9df" }}>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
                       <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 10px", borderRadius: 999, background: "#f7f2e8", color: "#8a5a1f", fontSize: "0.74rem", fontWeight: 700 }}>
@@ -1203,98 +1338,259 @@ export default function Scores() {
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         )}
 
       {/* Leaderboard Table */}
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", marginTop: 18 }}>
-        {loading && <div style={{ display: "flex", justifyContent: "center", padding: "4rem 0" }}><Loader2 style={{ width: 28, height: 28, color: "#1e4a34", animation: "spin 1s linear infinite" }} /></div>}
-        
-        {!loading && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", border: "1.5px solid #e0dbd2", boxShadow: "0 6px 32px rgba(26,74,52,0.09)", borderTop: "3.5px solid #1a3a2a", flex: 1, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 18, marginTop: 18, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {loading && <div style={{ display: "flex", justifyContent: "center", padding: "4rem 0" }}><Loader2 style={{ width: 28, height: 28, color: "#1e4a34", animation: "spin 1s linear infinite" }} /></div>}
+          
+          {!loading && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} style={{ background: "#fff", borderRadius: 18, overflow: "hidden", border: "1.5px solid #e0dbd2", boxShadow: "0 6px 32px rgba(26,74,52,0.09)", borderTop: "3.5px solid #1a3a2a", flex: 1, display: "flex", flexDirection: "column" }}>
             <div style={{ overflowX: "auto", flex: 1 }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "linear-gradient(90deg,#f8f6f1,#fbfaf7)" }}>
                     <th style={{ padding: "13px 24px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 80 }}>Rank</th>
                     <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0" }}>Student</th>
-                    <th style={{ padding: "13px 16px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
-                    <th style={{ padding: "13px 16px", textAlign: "right", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Score</th>
-                    <th style={{ padding: "13px 24px", textAlign: "center", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 100 }}>Actions</th>
+                    <th style={{ padding: "13px 12px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 140 }}>Batch</th>
+                    <th style={{ padding: "13px 12px", textAlign: "left", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 120 }}>Score</th>
+                    {viewMode !== "weekly" && <th style={{ padding: "13px 24px", textAlign: "center", fontSize: "0.72rem", fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a6050", borderBottom: "2px solid #ede8e0", width: 100 }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   <AnimatePresence mode="sync">
-                    {paged.map((s, i) => {
-                      const rank = (currentPage - 1) * PG + i;
-                      return (
-                        <motion.tr key={s.enrollment_no} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: i * 0.02, duration: 0.2 }}
+                    {viewMode === "weekly" ? (
+                      weeklyLeaderboard.map((st, i) => (
+                        <motion.tr key={st.enrollment_no} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: i * 0.02, duration: 0.2 }}
                           style={{ borderBottom: "1px solid #f4f1eb", transition: "background 0.15s" }}
                           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "linear-gradient(90deg,#f5f3ee,#faf9f6)"; }}
                           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                          
+
                           <td style={{ padding: "12px 24px" }}>
-                            {rank < 3 ? (
-                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, background: rank === 0 ? "#fff3cc" : rank === 1 ? "#f0f0f0" : "#ffeadb", border: `1px solid ${rank === 0 ? "#f0d060" : rank === 1 ? "#d0d0d0" : "#f0b080"}` }}>
-                                <Trophy size={14} color={rank === 0 ? "#b08000" : rank === 1 ? "#606060" : "#a05020"} />
+                            {st.rank && st.rank <= 3 ? (
+                              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, background: st.rank === 1 ? "#fff3cc" : st.rank === 2 ? "#f0f0f0" : "#ffeadb", border: `1px solid ${st.rank === 1 ? "#f0d060" : st.rank === 2 ? "#d0d0d0" : "#f0b080"}` }}>
+                                <Trophy size={14} color={st.rank === 1 ? "#b08000" : st.rank === 2 ? "#606060" : "#a05020"} />
                               </div>
                             ) : (
-                              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#8a7e72", marginLeft: 8 }}>#{rank + 1}</span>
+                              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#8a7e72", marginLeft: 8 }}>#{i + 1}</span>
                             )}
                           </td>
 
                           <td style={{ padding: "12px 16px" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <StudentAvatar name={s.name} enrollmentNo={s.enrollment_no} photoUrl={s.profile_image} className="w-10 h-10" />
+                            <div onClick={() => setSelectedPanelStudent(st.enrollment_no)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: 'pointer' }}>
+                              <img src={st.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(st.name || 'U')}&background=random`} alt="" style={{ width: 40, height: 40, borderRadius: 999, objectFit: 'cover' }} />
                               <div>
-                                <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#18180e", lineHeight: 1.3, margin: 0 }}>{s.name}</p>
-                                <p style={{ fontSize: "0.72rem", color: "#b0a898", lineHeight: 1.3, margin: 0 }}>{s.enrollment_no}</p>
+                                <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#18180e", lineHeight: 1.3, margin: 0 }}>{st.name}</p>
+                                <p style={{ fontSize: "0.72rem", color: "#b0a898", lineHeight: 1.3, margin: 0 }}>{st.enrollment_no}</p>
                               </div>
                             </div>
                           </td>
 
-                          <td style={{ padding: "12px 16px" }}>
-                            <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{s.batch || "N/A"}</span>
+                          <td style={{ padding: "12px 12px" }}>
+                            <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{st.batch || "N/A"}</span>
                           </td>
 
-                          <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                            <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{s.points}</span>
+                          <td style={{ padding: "12px 12px", textAlign: "left" }}>
+                            <span style={{ fontSize: "1rem", fontWeight: 800, color: i === 0 ? "#1e4a34" : "#18180e" }}>{st.score}</span>
                           </td>
 
-                          <td style={{ padding: "12px 24px", textAlign: "center" }}>
-                            {hasWriteAccess() && (
-                              <button onClick={() => handleEditClick(s)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #c8d8c0", background: "#edf6f0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "#d4ecdc")} onMouseLeave={e => (e.currentTarget.style.background = "#edf6f0")}>
+                          {viewMode !== "weekly" && (
+                            <td style={{ padding: "12px 24px", textAlign: "center" }}>
+                              {hasWriteAccess() && (
+                              <button onClick={() => handleEditClick(st as any)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #c8d8c0", background: "#edf6f0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "#d4ecdc")} onMouseLeave={e => (e.currentTarget.style.background = "#edf6f0") }>
                                 <Pencil size={13} color="#1e5c42" />
                               </button>
-                            )}
-                          </td>
+                              )}
+                            </td>
+                          )}
                         </motion.tr>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      paged.map((s, i) => {
+                        const rank = (currentPage - 1) * PG + i;
+                        return (
+                          <motion.tr key={s.enrollment_no} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ delay: i * 0.02, duration: 0.2 }}
+                            style={{ borderBottom: "1px solid #f4f1eb", transition: "background 0.15s" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "linear-gradient(90deg,#f5f3ee,#faf9f6)"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                            
+                            <td style={{ padding: "12px 24px" }}>
+                              {rank < 3 ? (
+                                <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, background: rank === 0 ? "#fff3cc" : rank === 1 ? "#f0f0f0" : "#ffeadb", border: `1px solid ${rank === 0 ? "#f0d060" : rank === 1 ? "#d0d0d0" : "#f0b080"}` }}>
+                                  <Trophy size={14} color={rank === 0 ? "#b08000" : rank === 1 ? "#606060" : "#a05020"} />
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#8a7e72", marginLeft: 8 }}>#{rank + 1}</span>
+                              )}
+                            </td>
+
+                            <td style={{ padding: "12px 16px" }}>
+                              <div onClick={() => setSelectedPanelStudent(s.enrollment_no)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: 'pointer' }}>
+                                <StudentAvatar name={s.name} enrollmentNo={s.enrollment_no} photoUrl={s.profile_image} className="w-10 h-10" />
+                                <div>
+                                  <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "#18180e", lineHeight: 1.3, margin: 0 }}>{s.name}</p>
+                                  <p style={{ fontSize: "0.72rem", color: "#b0a898", lineHeight: 1.3, margin: 0 }}>{s.enrollment_no}</p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td style={{ padding: "12px 12px" }}>
+                              <span style={{ display: "inline-flex", alignItems: "center", padding: "4px 11px", borderRadius: 50, fontSize: "0.74rem", fontWeight: 700, background: "#e4f0ec", color: "#1e5c42", border: "1.5px solid #aad4c0" }}>{s.batch || "N/A"}</span>
+                            </td>
+
+                            <td style={{ padding: "12px 12px", textAlign: "left" }}>
+                              <span style={{ fontSize: "1rem", fontWeight: 800, color: rank === 0 ? "#1e4a34" : "#18180e" }}>{s.points}</span>
+                            </td>
+
+                            {viewMode !== "weekly" && (
+                              <td style={{ padding: "12px 24px", textAlign: "center" }}>
+                                {hasWriteAccess() && (
+                                <button onClick={() => handleEditClick(s)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #c8d8c0", background: "#edf6f0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "#d4ecdc")} onMouseLeave={e => (e.currentTarget.style.background = "#edf6f0") }>
+                                  <Pencil size={13} color="#1e5c42" />
+                                </button>
+                                )}
+                              </td>
+                            )}
+                          </motion.tr>
+                        );
+                      })
+                    )}
                   </AnimatePresence>
                 </tbody>
               </table>
             </div>
 
             {/* Pagination */}
-            <div style={{ padding: "13px 24px", borderTop: "1px solid #f4f1eb", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fbfaf7", borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
-              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#8a7e72", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Showing {(currentPage - 1) * PG + 1}–{Math.min(currentPage * PG, scores.length)} of {scores.length}
-              </span>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === 1 ? 0.4 : 1 }}><ChevronLeft size={16} /></button>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {Array.from({ length: Math.ceil(scores.length / PG) }, (_, i) => i + 1).map(p => (
-                    <button key={p} onClick={() => setCurrentPage(p)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: currentPage === p ? GRN : "#fff", color: currentPage === p ? "#fff" : "#6a6050", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", transition: "0.2s" }}>{p}</button>
-                  ))}
+            {viewMode !== "weekly" && (
+              <div style={{ padding: "13px 24px", borderTop: "1px solid #f4f1eb", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fbfaf7", borderBottomLeftRadius: 18, borderBottomRightRadius: 18 }}>
+                <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#8a7e72", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                  Showing {(currentPage - 1) * PG + 1}–{Math.min(currentPage * PG, scores.length)} of {scores.length}
+                </span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === 1 ? 0.4 : 1 }}><ChevronLeft size={16} /></button>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {Array.from({ length: Math.ceil(scores.length / PG) }, (_, i) => i + 1).map(p => (
+                      <button key={p} onClick={() => setCurrentPage(p)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: currentPage === p ? GRN : "#fff", color: currentPage === p ? "#fff" : "#6a6050", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", transition: "0.2s" }}>{p}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(scores.length / PG), p + 1))} disabled={currentPage === Math.ceil(scores.length / PG)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === Math.ceil(scores.length / PG) ? 0.4 : 1 }}><ChevronRight size={16} /></button>
                 </div>
-                <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(scores.length / PG), p + 1))} disabled={currentPage === Math.ceil(scores.length / PG)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #e0dbd2", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: currentPage === Math.ceil(scores.length / PG) ? 0.4 : 1 }}><ChevronRight size={16} /></button>
               </div>
-            </div>
-          </motion.div>
+            )}
+            </motion.div>
+          )}
+        </div>
+
+        {/* Right Panel: weekly leaderboard + student drill-down (only for weekly view) */}
+        {viewMode === "weekly" && (
+        <div style={{ width: 360, minWidth: 260 }}>
+          <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #efe9df", padding: 14, boxShadow: "0 6px 22px rgba(26,74,52,0.04)" }}>
+            <h4 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 800, color: "#1a1810" }}>Weekly Leaderboard</h4>
+            <p style={{ margin: "6px 0 12px", fontSize: "0.78rem", color: "#7d7265" }}>Click a student to see day-wise progress (last 7 days)</p>
+
+            {!selectedPanelStudent ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Overall weekly totals chart */}
+                <div style={{ height: 160 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={overallWeeklyTotals} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="overallFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#1e4a34" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="#1e4a34" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f4f5f6" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
+                      <YAxis tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} width={28} />
+                      <RechartsTooltip content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const d = payload[0].payload;
+                        return (<div style={{ background: '#1a3a2a', color: '#fff', padding: 8, borderRadius: 8 }}><div style={{ fontSize: 12, fontWeight: 800 }}>{d.label}</div><div style={{ fontSize: 14, fontWeight: 900 }}>{d.total}</div></div>);
+                      }} />
+                      <Area type="monotone" dataKey="total" stroke="#1e4a34" strokeWidth={3} fill="url(#overallFill)" dot={{ r: 3, fill: '#1e4a34', strokeWidth: 2, stroke: '#fff' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{ fontSize: '0.82rem', color: '#7d7265', fontWeight: 700 }}>Weekly Totals (last {weeklyDateSeries.length} dates)</div>
+
+                {/* Student list below the chart */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {weeklyLeaderboard.length > 0 ? weeklyLeaderboard.map((st) => (
+                    <button key={st.enrollment_no} onClick={() => setSelectedPanelStudent(st.enrollment_no)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, border: "1px solid #f0efe9", background: "#fbfaf7", cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "#edf6f0", color: "#1e5c42", fontWeight: 800 }}>{st.rank}</div>
+                      <img src={st.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(st.name || 'U')}&background=random`} alt="" style={{ width: 36, height: 36, borderRadius: 999, objectFit: "cover" }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#18180e", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{st.name}</div>
+                        <div style={{ fontSize: "0.75rem", color: "#8a7e72" }}>{st.batch || st.enrollment_no}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontWeight: 900, color: "#1e4a34" }}>{st.score}</div>
+                        <div style={{ fontSize: "0.72rem", color: "#8a7e72" }}>pts</div>
+                      </div>
+                    </button>
+                  )) : (
+                    <div style={{ padding: 12, borderRadius: 10, border: "1px dashed #efe9df", background: "#fff8f8", color: "#a33" }}>No weekly session data</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button onClick={() => setSelectedPanelStudent("")} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e0dbd2", background: "#fff" }}>Back</button>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <img src={(cachedStudentsData.find(s => normalizeText(s.enrollment_no) === selectedPanelStudent)?.profile_image) || `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedPanelStudent)}&background=random`} alt="" style={{ width: 44, height: 44, borderRadius: 999 }} />
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{(cachedStudentsData.find(s => normalizeText(s.enrollment_no) === selectedPanelStudent)?.student_name) || selectedPanelStudent}</div>
+                      <div style={{ fontSize: 12, color: "#8a7e72" }}>{(cachedStudentsData.find(s => normalizeText(s.enrollment_no) === selectedPanelStudent)?.batch) || ''}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ height: 180 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={selectedPanelProgress} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="spFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#1e4a34" stopOpacity={0.28} />
+                          <stop offset="100%" stopColor="#1e4a34" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f4f5f6" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 700 }} />
+                      <YAxis tickLine={false} axisLine={{ stroke: '#e2e8f0' }} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 700 }} width={28} />
+                      <RechartsTooltip content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        const d = payload[0].payload;
+                        return (<div style={{ background: '#1a3a2a', color: '#fff', padding: 8, borderRadius: 8 }}><div style={{ fontSize: 12, fontWeight: 800 }}>{d.label}</div><div style={{ fontSize: 14, fontWeight: 900 }}>{d.score}</div></div>);
+                      }} />
+                      <Area type="monotone" dataKey="score" stroke="#1e4a34" strokeWidth={3} fill="url(#spFill)" dot={{ r: 4, fill: '#1e4a34', strokeWidth: 2, stroke: '#fff' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ flex: 1, padding: 8, borderRadius: 8, background: '#f6fffa', border: '1px solid #e6f6ee' }}>
+                    <div style={{ fontSize: 11, color: '#059669', fontWeight: 800 }}>Total</div>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>{selectedPanelSummary.total}</div>
+                  </div>
+                  <div style={{ flex: 1, padding: 8, borderRadius: 8, background: '#fff7ed', border: '1px solid #fbe6d2' }}>
+                    <div style={{ fontSize: 11, color: '#b45309', fontWeight: 800 }}>Best Day</div>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>{selectedPanelSummary.bestDay?.label || '-'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
         )}
       </div>
 
