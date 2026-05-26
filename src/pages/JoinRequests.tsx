@@ -49,7 +49,7 @@ const GRN = "linear-gradient(135deg,#1e4a34,#122a1e)";
 export default function JoinRequests() {
   const [rows, setRows] = useState<JoinUsRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState<Record<string, { accept: boolean; reject: boolean }>>({});
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [descModal, setDescModal] = useState<{isOpen: boolean, text: string, name: string}>({isOpen: false, text: "", name: ""});
@@ -263,9 +263,22 @@ export default function JoinRequests() {
 
   const handleJoinEvent = useCallback(
     (payload: Record<string, unknown>) => {
-      fetchRows({ silent: true });
-
       const action = payload.action;
+      const id = typeof payload.id === "string" ? payload.id : (payload.id ? String(payload.id) : "");
+      const status = typeof payload.status === "string" ? payload.status.toLowerCase() : "";
+
+      if (action === "updated" && id && status) {
+        setRows((prevRows) =>
+          prevRows.map((row) =>
+            row.id === id ? { ...row, status: status } : row
+          )
+        );
+      } else if (action === "deleted" && id) {
+        setRows((prevRows) => prevRows.filter((row) => row.id !== id));
+      } else {
+        fetchRows({ silent: true });
+      }
+
       if (action === "created" || action === "pending") {
         const name = typeof payload.name === "string" ? payload.name : "";
         toast({
@@ -279,6 +292,20 @@ export default function JoinRequests() {
     },
     [fetchRows, toast],
   );
+
+  const setRequestLoading = (id: string, action: "accept" | "reject", isLoading: boolean) => {
+    setUpdatingStatus((prev) => {
+      const current = prev[id] || { accept: false, reject: false };
+      const next = { ...current, [action]: isLoading };
+      if (!next.accept && !next.reject) {
+        const { [id]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [id]: next };
+    });
+  };
+
+  const getRequestLoading = (id: string) => updatingStatus[id] || { accept: false, reject: false };
 
   // Real-time updates (same dedicated EventSource pattern as Publications page)
   useEffect(() => {
@@ -295,10 +322,28 @@ export default function JoinRequests() {
 
     es.addEventListener("join_request_changed", onEvent);
     es.addEventListener("join_request_pending", onEvent);
-    es.onerror = () => {};
+    es.onerror = (event) => {
+      console.error("JoinRequests EventSource error:", event);
+    };
 
     return () => es.close();
   }, [handleJoinEvent]);
+
+  useEffect(() => {
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchRows({ silent: true });
+      }
+    };
+
+    window.addEventListener("focus", refreshOnVisibility);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
+
+    return () => {
+      window.removeEventListener("focus", refreshOnVisibility);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
+    };
+  }, [fetchRows]);
 
   const filteredRows = useMemo(() => {
     if (yearFilter === "all") return rows;
@@ -334,10 +379,14 @@ export default function JoinRequests() {
   };
 
   const handleAccept = async (id: string) => {
-    setUpdatingId(id);
+    setRequestLoading(id, "accept", true);
     try {
       const res = await adminAPI.updateJoinRequest(id, "approved");
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
+      setRows((prevRows) =>
+        prevRows.map((row) =>
+          row.id === id ? { ...row, status: "approved" } : row
+        )
+      );
       toast({
         title: "Request accepted",
         description: res?.student
@@ -347,20 +396,24 @@ export default function JoinRequests() {
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
-      setUpdatingId(null);
+      setRequestLoading(id, "accept", false);
     }
   };
 
   const handleReject = async (id: string) => {
-    setUpdatingId(id);
+    setRequestLoading(id, "reject", true);
     try {
       await adminAPI.updateJoinRequest(id, "rejected");
-      setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
+      setRows((prevRows) =>
+        prevRows.map((row) =>
+          row.id === id ? { ...row, status: "rejected" } : row
+        )
+      );
       toast({ title: "Request rejected" });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Error", description: error.message });
     } finally {
-      setUpdatingId(null);
+      setRequestLoading(id, "reject", false);
     }
   };
 
@@ -560,10 +613,10 @@ export default function JoinRequests() {
                             <Button 
                               size="sm" 
                               onClick={() => handleAccept(r.id)}
-                              disabled={updatingId === r.id}
+                              disabled={getRequestLoading(r.id).accept || getRequestLoading(r.id).reject}
                               className="bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-full h-10 px-6 font-bold transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer gap-2 border-b-2 border-teal-800/30"
                             >
-                              {updatingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                              {getRequestLoading(r.id).accept ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                                 <>
                                   <CheckCircle className="w-4 h-4" />
                                   Accept
@@ -573,11 +626,15 @@ export default function JoinRequests() {
                             <Button 
                               size="sm" 
                               onClick={() => handleReject(r.id)}
-                              disabled={updatingId === r.id}
+                              disabled={getRequestLoading(r.id).accept || getRequestLoading(r.id).reject}
                               className="bg-gradient-to-br from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white rounded-full h-10 px-6 font-bold transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer gap-2 border-b-2 border-red-800/30"
                             >
-                              <XCircle className="w-4 h-4" />
-                              Reject
+                              {getRequestLoading(r.id).reject ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                                <>
+                                  <XCircle className="w-4 h-4" />
+                                  Reject
+                                </>
+                              )}
                             </Button>
                           </>
                         ) : (

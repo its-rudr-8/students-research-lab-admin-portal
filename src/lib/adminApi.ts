@@ -234,6 +234,10 @@ export const adminAPI = {
     return apiCall("/leaderboard");
   },
 
+  async getImpactMetrics() {
+    return apiCall("/impact-metrics");
+  },
+
   async getMonthlyLeaderboard(month?: string | number, year?: number) {
     let endpoint = "/leaderboard/monthly";
     if (month && year) {
