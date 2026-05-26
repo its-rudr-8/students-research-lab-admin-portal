@@ -63,7 +63,13 @@ function Dashboard() {
   const [timeDedication, setTimeDedication] = useState<any[]>([]);
   const [prevHoursDedicated, setPrevHoursDedicated] = useState(0);
   const [researchCount, setResearchCount] = useState(0);
-  const [publicationCount, setPublicationCount] = useState(0);
+  const [impactMetrics, setImpactMetrics] = useState({
+    srlSessions: null,
+    ongoingResearchProjects: null,
+    researchPublications: null,
+    hackathonWinners: null,
+    hackathonFinalists: null,
+  });
   const [recentAchievements, setRecentAchievements] = useState<any[]>([]);
 
   const academicYearStartForDate = (date: Date) => {
@@ -312,44 +318,28 @@ function Dashboard() {
 
     const fetchImpactCounts = async () => {
       try {
-        const memberCvPromise = isAdmin
-          ? adminAPI.getAllMemberCVs().catch(() => [])
-          : user?.enrollmentNo
-          ? adminAPI.getMemberCVByEnrollment(user.enrollmentNo).catch(() => null)
-          : Promise.resolve(null);
-
-        const [publicationRes, memberCvData] = await Promise.all([
-          adminAPI.getPublications().catch(() => null),
-          memberCvPromise,
-        ]);
-
-        const publications = Array.isArray(publicationRes)
-          ? publicationRes
-          : Array.isArray(publicationRes?.data)
-          ? publicationRes.data
-          : [];
-
-        const publicationCount = publications.length;
-        const memberCvProfiles = isAdmin
-          ? Array.isArray(memberCvData)
-            ? memberCvData
-            : []
-          : memberCvData
-          ? [memberCvData]
-          : [];
-        const ongoingResearchCount = memberCvProfiles.reduce((sum: number, cv: any) => {
-          const works = Array.isArray(cv.research_work) ? cv.research_work.filter(Boolean) : [];
-          const ongoingWorks = works.filter((work: any) =>
-            String(work).toLowerCase().includes("ongoing")
-          );
-          return sum + ongoingWorks.length;
-        }, 0);
+        const impactRes = await adminAPI.getImpactMetrics().catch(() => null);
+        const impactData = impactRes?.data || {};
 
         if (!isActive) return;
-        setPublicationCount(publicationCount);
-        setResearchCount(ongoingResearchCount);
+        setImpactMetrics({
+          srlSessions: Number(impactData.srlSessions ?? 0),
+          ongoingResearchProjects: Number(impactData.ongoingResearchProjects ?? 0),
+          researchPublications: Number(impactData.researchPublications ?? 0),
+          hackathonWinners: Number(impactData.hackathonWinners ?? 0),
+          hackathonFinalists: Number(impactData.hackathonFinalists ?? 0),
+        });
       } catch (error) {
         console.error("Dashboard impact metric fetch error:", error);
+        if (isActive) {
+          setImpactMetrics({
+            srlSessions: 0,
+            ongoingResearchProjects: 0,
+            researchPublications: 0,
+            hackathonWinners: 0,
+            hackathonFinalists: 0,
+          });
+        }
       }
     };
 
@@ -499,43 +489,37 @@ function Dashboard() {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-y-4 gap-x-3 relative z-10">
+            <div className="grid grid-cols-2 gap-y-2 gap-x-3 relative z-10">
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">4<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{impactMetrics.srlSessions === null ? '...' : `${impactMetrics.srlSessions}+`}</span>
                 </div>
-                <p className="text-[9px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Posters</p>
+                <p className="text-[9px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">SRL Sessions</p>
               </div>
               <div className="flex flex-col border-l border-[#e0dbd2] pl-6">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{researchCount}<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{impactMetrics.ongoingResearchProjects === null ? '...' : `${impactMetrics.ongoingResearchProjects}+`}</span>
                 </div>
                 <p className="text-[9px] font-bold text-slate-800 uppercase tracking-[0.1em] mt-1">Ongoing Research Projects</p>
               </div>
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{publicationCount}<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">{impactMetrics.researchPublications === null ? '...' : `${impactMetrics.researchPublications}+`}</span>
                 </div>
-                <p className="text-[9px] font-bold text-slate-800 uppercase tracking-[0.1em] mt-1">No. of Publications</p>
+                <p className="text-[9px] font-bold text-slate-800 uppercase tracking-[0.1em] mt-1">Research Publications</p>
               </div>
               <div className="flex flex-col border-l border-[#e0dbd2] pl-6">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-serif font-black text-[#1a3a2a]">20<span className="text-sm text-[#1a3a2a]/40 ml-0.5">+</span></span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="text-3xl font-serif font-black text-[#1a3a2a]">{impactMetrics.hackathonWinners === null ? '...' : `${impactMetrics.hackathonWinners}+`}</span>
+                    <p className="text-[8px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Winners</p>
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-3xl font-serif font-black text-[#1a3a2a]">{impactMetrics.hackathonFinalists === null ? '...' : `${impactMetrics.hackathonFinalists}+`}</span>
+                    <p className="text-[8px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Finalists</p>
+                  </div>
                 </div>
-                <p className="text-[9px] font-black text-[#6a6050] uppercase tracking-[0.2em] mt-1">Winners</p>
-              </div>
-            </div>
-
-            <div className="pt-4 mt-1 border-t border-[#e0dbd2] flex items-center justify-between relative z-10">
-              <div>
-                <p className="text-xs font-serif italic text-[#1a3a2a] font-black tracking-tight leading-none">Impact Suite</p>
-                <p className="text-[8px] font-black text-[#6a6050] uppercase tracking-[0.15em] mt-1.5">Lab Results</p>
-              </div>
-              <div className="flex flex-col items-end">
-                <div className="flex items-baseline gap-1 bg-[#1a3a2a]/5 px-3 py-1.5 rounded-full border border-[#1a3a2a]/10 group-hover:bg-[#1a3a2a]/10 transition-all">
-                  <span className="text-sm font-serif font-black text-[#1a3a2a]">70<span className="text-[10px] ml-0.5 opacity-50">+</span></span>
-                  <span className="text-[9px] font-black text-[#1a3a2a]/60 uppercase tracking-tighter ml-1">Finalists</span>
-                </div>
+                <p className="text-[8px] uppercase tracking-[0.2em] text-slate-400 mt-2">Hackathons</p>
               </div>
             </div>
           </div>
