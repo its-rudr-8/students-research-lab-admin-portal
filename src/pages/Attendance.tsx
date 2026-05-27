@@ -1,14 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Check, X, Calendar as CalendarIcon, Pencil } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { motion } from "framer-motion";
+import { BarChart, Bar, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import StudentAvatar from "@/components/StudentAvatar";
 import { cn } from "@/lib/utils";
 import { getStoredUser, hasWriteAccess } from "@/lib/auth";
 import { adminAPI, parseList } from "@/lib/adminApi";
 import { API_BASE_URL } from "@/config/apiConfig";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { eachDayOfInterval, endOfMonth, format, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -79,6 +80,8 @@ const getMonthLabel = (monthKey: string) => format(new Date(`${monthKey}-01`), "
 
 const getMonthRows = (records: any[], monthKey: string) =>
   records.filter((row: any) => String(row.period || "").startsWith(monthKey));
+
+const isVisibleStudent = (student: any) => String(student.member_type || "member").toLowerCase() !== "admin";
 
 const buildAttendanceRows = (
   studentsData: any[],
@@ -256,6 +259,94 @@ export default function Attendance() {
   useEffect(() => {
     setCurrentPage(1);
   }, [attendanceDate, selectedMonth, viewMode]);
+
+  const analysisData = useMemo(() => {
+    const visibleEnrollments = new Set<string>();
+
+    cachedStudentsData
+      .filter(isVisibleStudent)
+      .forEach((student: any) => {
+        const enrollmentNo = String(student.enrollment_no || "").trim();
+        if (!enrollmentNo) return;
+        if (!canEdit && enrollmentNo !== ownEnrollment) return;
+        visibleEnrollments.add(enrollmentNo);
+      });
+
+    if (viewMode === "day") {
+      const dayRecords = cachedAttendanceData.filter((row: any) => {
+        const enrollmentNo = String(row.enrollment_no || "").trim();
+        return row.period === attendanceDate && visibleEnrollments.has(enrollmentNo);
+      });
+
+      const presentCount = dayRecords.filter((row: any) => getPresentStatus(row.hours, row.attendance)).length;
+      const absentCount = Math.max(visibleEnrollments.size - presentCount, 0);
+
+      return {
+        title: "Selected Day Attendance Analysis",
+        subtitle: attendanceDate ? format(new Date(attendanceDate), "do MMMM yyyy") : "Choose a day to see the attendance breakdown.",
+        mode: "day" as const,
+        totalStudents: visibleEnrollments.size,
+        presentCount,
+        absentCount,
+        totalHours: Number(dayRecords.reduce((sum, row: any) => sum + Number(row.hours || 0), 0).toFixed(1)),
+        chartData: [
+          { name: "Present", value: presentCount, fill: "#0f766e" },
+          { name: "Absent", value: absentCount, fill: "#dc2626" },
+        ],
+      };
+    }
+
+    const monthStart = parseISO(`${selectedMonth}-01`);
+    const monthEnd = endOfMonth(monthStart);
+    const dayMap = new Map<string, { present: number; hours: number }>();
+    const studentMonthTotals = new Map<string, number>();
+
+    cachedAttendanceData.forEach((row: any) => {
+      const period = String(row.period || "");
+      const enrollmentNo = String(row.enrollment_no || "").trim();
+
+      if (!period.startsWith(selectedMonth) || !visibleEnrollments.has(enrollmentNo)) return;
+
+      const key = period.slice(0, 10);
+      const bucket = dayMap.get(key) || { present: 0, hours: 0 };
+      if (getPresentStatus(row.hours, row.attendance)) {
+        bucket.present += 1;
+      }
+      bucket.hours += Number(row.hours || 0);
+      dayMap.set(key, bucket);
+
+      if (getPresentStatus(row.hours, row.attendance)) {
+        studentMonthTotals.set(enrollmentNo, (studentMonthTotals.get(enrollmentNo) || 0) + Number(row.hours || 0));
+      }
+    });
+
+    const chartData = eachDayOfInterval({ start: monthStart, end: monthEnd }).map((date) => {
+      const key = format(date, "yyyy-MM-dd");
+      const bucket = dayMap.get(key) || { present: 0, hours: 0 };
+
+      return {
+        name: format(date, "d"),
+        dateLabel: format(date, "EEE, do MMM"),
+        present: bucket.present,
+        hours: Number(bucket.hours.toFixed(1)),
+      };
+    });
+
+    const presentCount = studentMonthTotals.size;
+    const absentCount = Math.max(visibleEnrollments.size - presentCount, 0);
+    const highestHours = Array.from(studentMonthTotals.values()).reduce((max, hours) => Math.max(max, hours), 0);
+
+    return {
+      title: "Selected Month Attendance Analysis",
+      subtitle: getMonthLabel(selectedMonth),
+      mode: "month" as const,
+      totalStudents: visibleEnrollments.size,
+      presentCount,
+      absentCount,
+      totalHours: Number(highestHours.toFixed(1)),
+      chartData,
+    };
+  }, [attendanceDate, cachedAttendanceData, cachedStudentsData, canEdit, ownEnrollment, selectedMonth, viewMode]);
 
   const handleAddAttendance = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -544,6 +635,87 @@ export default function Attendance() {
             </PopoverContent>
           </Popover>
         )}
+      </motion.div>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="rounded-2xl border border-[#EAD8C0]/60 bg-gradient-to-br from-white to-[#FAF7F2] p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold text-stone-800">{analysisData.title}</h3>
+            <p className="text-sm text-muted-foreground">{analysisData.subtitle}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[340px]">
+            <div className="rounded-xl border border-[#EAD8C0]/50 bg-white px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Students</div>
+              <div className="text-lg font-semibold text-stone-800">{analysisData.totalStudents}</div>
+            </div>
+            <div className="rounded-xl border border-[#EAD8C0]/50 bg-white px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Present</div>
+              <div className="text-lg font-semibold text-teal-700">
+                {analysisData.mode === "day" ? analysisData.presentCount : analysisData.presentCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#EAD8C0]/50 bg-white px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Absent</div>
+              <div className="text-lg font-semibold text-red-600">
+                {analysisData.mode === "day" ? analysisData.absentCount : analysisData.absentCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-[#EAD8C0]/50 bg-white px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Hours</div>
+              <div className="text-lg font-semibold text-stone-800">{analysisData.totalHours}</div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 h-64 w-full rounded-xl border border-[#EAD8C0]/40 bg-white/80 p-2 sm:p-3">
+          {analysisData.chartData.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              No attendance data available for the selected {viewMode}.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={analysisData.chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ead8c0" />
+                <XAxis dataKey="name" tick={{ fill: "#8b735b", fontSize: 12 }} axisLine={{ stroke: "#ead8c0" }} tickLine={false} />
+                <YAxis tick={{ fill: "#8b735b", fontSize: 12 }} axisLine={{ stroke: "#ead8c0" }} tickLine={false} allowDecimals={false} />
+                <RechartsTooltip
+                  cursor={{ fill: "rgba(234, 216, 192, 0.18)" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+
+                    const point = payload[0]?.payload as any;
+
+                    return (
+                      <div className="rounded-lg border border-[#EAD8C0]/60 bg-white px-3 py-2 shadow-lg">
+                        <div className="text-sm font-semibold text-stone-800">
+                          {analysisData.mode === "month" ? point?.dateLabel || label : label}
+                        </div>
+                        <div className="mt-1 space-y-1 text-xs text-stone-600">
+                          {analysisData.mode === "day" ? (
+                            <>
+                              <div>Present: {point?.name === "Present" ? point?.value : analysisData.presentCount}</div>
+                              <div>Absent: {point?.name === "Absent" ? point?.value : analysisData.absentCount}</div>
+                            </>
+                          ) : (
+                            <>
+                              <div>Present students: {point?.present ?? 0}</div>
+                              <div>Total hours: {point?.hours ?? 0}</div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey={analysisData.mode === "day" ? "value" : "present"} radius={[8, 8, 0, 0]} fill="#0f766e">
+                  {analysisData.mode === "day"
+                    ? analysisData.chartData.map((entry: any, index: number) => (
+                        <Cell key={`day-${index}`} fill={entry.fill} />
+                      ))
+                    : null}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
       </motion.div>
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col lg:flex-row gap-6">
         <div className="w-full lg:max-w-3xl flex-1">
