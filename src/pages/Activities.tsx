@@ -245,7 +245,7 @@ export default function Activities() {
         date: formData.date,
         Photo: formData.Photo || null,
       };
-      const res = await adminApi.post('/admin/activities', payload);
+      const res = await adminAPI.createActivity(payload);
       if (res) {
         toast({ title: "Activity added successfully" });
         setOpen(false);
@@ -293,7 +293,7 @@ export default function Activities() {
         date: editFormData.date,
         Photo: editFormData.Photo || null,
       };
-      const res = await adminApi.put(`/admin/activities/${editingActivity.id}`, payload);
+      const res = await adminAPI.updateActivity(String(editingActivity.id), payload);
       if (res) {
         toast({ title: "Activity updated successfully" });
         setEditOpen(false);

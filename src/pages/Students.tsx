@@ -38,6 +38,16 @@ function FormFields({
   set: (v: typeof BLANK) => void;
   onImageUpload: (url: string) => void;
 }) {
+  const RenderLabel = ({ text }: { text: string }) => {
+    const required = /\*\s*$/.test(text);
+    const plain = text.replace(/\*\s*$/, "");
+    return (
+      <Label style={{ color: "#5a4a38", fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.01em" }}>
+        {plain}
+        {required && <span style={{ color: "#c0363a", marginLeft: 6 }}>*</span>}
+      </Label>
+    );
+  };
   const fields: [string, string, string, string?][] = [
     ["Email *", "email", "student@example.com", "email"],
     ["Institute", "institute_name", "KSV University"],
@@ -70,7 +80,7 @@ function FormFields({
         {/* Right – identity fields */}
         <div className="w-full flex flex-col gap-3 flex-grow justify-center">
           <div className="space-y-1.5">
-            <Label style={{ color: "#5a4a38", fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.01em" }}>Student Name *</Label>
+            <RenderLabel text={"Student Name *"} />
             <Input
               type="text"
               placeholder="Full name"
@@ -80,7 +90,7 @@ function FormFields({
             />
           </div>
           <div className="space-y-1.5">
-            <Label style={{ color: "#5a4a38", fontSize: "0.82rem", fontWeight: 700, letterSpacing: "0.01em" }}>Enrollment No *</Label>
+            <RenderLabel text={"Enrollment No *"} />
             <Input
               type="text"
               placeholder="24BECE30001"
@@ -96,7 +106,7 @@ function FormFields({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {fieldsBefore.map(([l, k, p, t]) => (
           <div key={k} className="space-y-1">
-            <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>
+            {/\*\s*$/.test(l) ? <RenderLabel text={l} /> : <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>}
             <Input type={t || "text"} placeholder={p} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} />
           </div>
         ))}
@@ -106,7 +116,7 @@ function FormFields({
         </div>
         {fieldsAfter.map(([l, k, p, t]) => (
           <div key={k} className="space-y-1">
-            <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>
+            {/\*\s*$/.test(l) ? <RenderLabel text={l} /> : <Label style={{ color: "#5a4a38", fontSize: "0.8rem", fontWeight: 600 }}>{l}</Label>}
             <Input type={t || "text"} placeholder={p} className="rounded-xl" value={(data as any)[k]} onChange={e => set({ ...data, [k]: e.target.value })} />
           </div>
         ))}
@@ -199,6 +209,7 @@ export default function Students() {
   const [editSt, setEditSt] = useState<Student | null>(null);
   const [form, setForm] = useState<typeof BLANK>(BLANK);
   const [selMode, setSelMode] = useState(false);
+  const [addSubmitting, setAddSubmitting] = useState(false);
   const { toast } = useToast();
   const canEdit = hasWriteAccess();
 
@@ -240,6 +251,7 @@ export default function Students() {
 
   const handleAdd = async () => {
     if (!canEdit) return;
+    if (addSubmitting) return;
     const errs: string[] = [];
     if (!form.student_name.trim()) errs.push("Student name is required.");
     if (!form.enrollment_no.trim()) errs.push("Enrollment number is required.");
@@ -247,7 +259,21 @@ export default function Students() {
     if (!form.email.trim()) errs.push("Email is required.");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.push("Enter a valid email address.");
     if (errs.length) { toast({ variant: "destructive", title: "Validation error", description: errs.join(" ") }); return; }
-    try { const r = await adminAPI.createStudent(form); if (r) { setAddOpen(false); setForm(BLANK); toast({ title: "Student added" }); await load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
+    setAddSubmitting(true);
+    try {
+      const r = await adminAPI.createStudent(form);
+      if (r) {
+        setAddOpen(false);
+        setForm(BLANK);
+        toast({ title: "Student added" });
+        await load();
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message });
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
   const handleEdit = async () => { if (!editSt || !canEdit) return; try { const r = await adminAPI.updateStudent(editSt.enrollment_no, form); if (r) { setEditSt(null); toast({ title: "Student updated" }); await load(); } } catch (e: any) { toast({ variant: "destructive", title: "Error", description: e.message }); } };
   const confirm = useConfirm();
 
@@ -321,7 +347,12 @@ export default function Students() {
               <DialogContent className="rounded-2xl sm:max-w-md max-h-[85vh] overflow-y-auto" style={{ background: "#fffdf9", border: "1.5px solid #e4ddd0" }}>
                 <DialogHeader><DialogTitle style={{ color: "#1a1810" }}>Add New Student</DialogTitle></DialogHeader>
                 <FormFields data={form} set={setForm} onImageUpload={(url) => setForm(prev => ({ ...prev, profile_image: url }))} />
-                <div className="flex justify-end gap-2 pt-4"><Button variant="outline" className="rounded-xl" onClick={() => setAddOpen(false)}>Cancel</Button><Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleAdd}>Add Student</Button></div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" className="rounded-xl" onClick={() => setAddOpen(false)}>Cancel</Button>
+                  <Button className="rounded-xl" style={{ background: GRN, color: "#fff" }} onClick={handleAdd} disabled={addSubmitting}>
+                    {addSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Student"}
+                  </Button>
+                </div>
               </DialogContent>
             </Dialog>
           )}
