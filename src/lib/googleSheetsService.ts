@@ -65,13 +65,11 @@ export const fetchGoogleSheetData = async (
     const rows = payload.values as string[][] | undefined;
 
     if (!rows || rows.length === 0) {
-      console.warn('No data found in the sheet');
       return [];
     }
 
     return mapRowsToObjects(rows, useHeaders);
   } catch (error) {
-    console.error('Error fetching Google Sheets data:', error);
     throw error;
   }
 };
@@ -110,7 +108,6 @@ export const fetchMultipleRanges = async (
 
     return result;
   } catch (error) {
-    console.error('Error fetching multiple ranges:', error);
     throw error;
   }
 };
@@ -141,7 +138,6 @@ export const getSheetMetadata = async () => {
       })),
     };
   } catch (error) {
-    console.error('Error fetching sheet metadata:', error);
     throw error;
   }
 };

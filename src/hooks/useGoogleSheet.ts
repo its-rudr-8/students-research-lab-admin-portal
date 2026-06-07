@@ -50,7 +50,6 @@ export const useGoogleSheet = (options: UseGoogleSheetOptions = {}) => {
       setMetadata(meta);
       return meta;
     } catch (err) {
-      console.error('Failed to load metadata:', err);
       return null;
     }
   };

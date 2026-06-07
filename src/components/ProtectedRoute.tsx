@@ -37,7 +37,6 @@ export default function ProtectedRoute() {
 	if (requiresAdmin) {
 		const user = getStoredUser();
 		if (user?.role !== "admin") {
-			console.warn(`Access denied to ${currentPath} for non-admin user (role: ${user?.role})`);
 			return <Navigate to="/" replace />;
 		}
 	}

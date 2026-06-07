@@ -114,7 +114,6 @@ export default function JoinRequests() {
         setBlobUrl(url);
         setOpen(true);
       } catch (err: any) {
-        console.error("Resume preview error:", err);
         const msg = err?.message || "Could not load resume preview.";
         setErrorMessage(msg);
         // Open dialog to show error message with fallback "Open in new tab" link
@@ -155,7 +154,6 @@ export default function JoinRequests() {
         // The browser will clean it up when the tab closes.
         // (We don't call revokeObjectURL here because the new tab still needs it.)
       } catch (err: any) {
-        console.error("Open in new tab failed:", err);
         toast({
           variant: "destructive",
           title: "Could not open resume",
@@ -322,9 +320,7 @@ export default function JoinRequests() {
 
     es.addEventListener("join_request_changed", onEvent);
     es.addEventListener("join_request_pending", onEvent);
-    es.onerror = (event) => {
-      console.error("JoinRequests EventSource error:", event);
-    };
+    es.onerror = () => {};
 
     return () => es.close();
   }, [handleJoinEvent]);
@@ -424,7 +420,7 @@ export default function JoinRequests() {
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 px-4 pb-12" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="max-w-[1400px] mx-auto space-y-6 px-4 pb-12">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl shadow-sm border border-[#EAD8C0]/50">
         <div>

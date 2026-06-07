@@ -400,7 +400,7 @@ export default function Achievements() {
         <div className="hidden lg:flex flex-col items-center justify-start pt-52 pr-4 flex-[0.35]">
           <div className="sticky top-44">
             <img
-              src="/Achievement.jpg"
+              src="/Achievement.webp"
               alt="Achievements"
               className="max-w-[340px] rounded-[2rem] shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:rotate-1 transition-all duration-700"
             />

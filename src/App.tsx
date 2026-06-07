@@ -17,10 +17,25 @@ import JoinRequests from "@/pages/JoinRequests";
 import MemberCV from "./pages/MemberCV";
 import SRLSessions from "./pages/SRLSessions";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import VerifyOtp from "@/pages/VerifyOtp";
+import ResetPassword from "@/pages/ResetPassword";
 import GoogleSheetData from "@/pages/GoogleSheetData";
 import SheetSync from "@/pages/SheetSync";
 import NotFound from "./pages/NotFound";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, isAuthenticated } from "@/lib/auth";
+
+// Wraps authentication-only pages (login, forgot-password, verify-otp, reset-password).
+// If the user is already authenticated, immediately redirect them to their portal
+// using `replace` so the auth page is removed from history — the back button cannot
+// return to it.
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  if (isAuthenticated()) {
+    const user = getStoredUser();
+    return <Navigate to={user?.role === "admin" ? "/" : "/member-cv"} replace />;
+  }
+  return <>{children}</>;
+};
 
 const queryClient = new QueryClient();
 
@@ -77,7 +92,10 @@ const App = () => {
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+            <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
+            <Route path="/verify-otp" element={<AuthRoute><VerifyOtp /></AuthRoute>} />
+            <Route path="/reset-password" element={<AuthRoute><ResetPassword /></AuthRoute>} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AdminLayout />}>
                 {/* Dashboard - accessible to both admin and members */}

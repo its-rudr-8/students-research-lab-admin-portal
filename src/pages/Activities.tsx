@@ -521,7 +521,7 @@ export default function Activities() {
           className="hidden lg:flex flex-col items-center justify-start pt-24 sticky top-20"
         >
           <img
-            src="/Activity.jpg"
+            src="/Activity.webp"
             alt="Activities"
             className="max-w-[300px] rounded-3xl shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500"
           />

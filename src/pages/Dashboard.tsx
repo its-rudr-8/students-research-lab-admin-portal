@@ -301,7 +301,7 @@ function Dashboard() {
         const prevList = prevRes?.leaderboard || (Array.isArray(prevRes) ? prevRes : []);
         setPrevHoursDedicated(Array.isArray(prevList) ? prevList.reduce((sum: number, s: any) => sum + (parseFloat(s.hours || s.total_hours || "0") || 0), 0) : 0);
 
-      } catch (error) { console.error("Dashboard error:", error); }
+      } catch { }
     };
     fetchData();
   }, [selectedMonth, selectedYear, refreshKey]);
@@ -329,8 +329,7 @@ function Dashboard() {
           hackathonWinners: Number(impactData.hackathonWinners ?? 0),
           hackathonFinalists: Number(impactData.hackathonFinalists ?? 0),
         });
-      } catch (error) {
-        console.error("Dashboard impact metric fetch error:", error);
+      } catch {
         if (isActive) {
           setImpactMetrics({
             srlSessions: 0,
@@ -365,7 +364,6 @@ function Dashboard() {
         initial={{ opacity: 0, y: 10 }} 
         transition={{ duration: 0.3 }}
         className="flex flex-col gap-5 h-full"
-        style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif" }}
       >
         {/* Month Navigator: Students Section Tab Theme */}
         <div className="flex items-center justify-between bg-[#f8f6f1] border border-[#e0dbd2] rounded-full p-1 md:p-1.5 px-3 md:px-4 shadow-sm shrink-0">
