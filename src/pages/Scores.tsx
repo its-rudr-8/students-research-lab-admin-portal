@@ -409,7 +409,7 @@ export default function Scores() {
       let rows = Array.from(agg.values());
       rows.sort((a, b) => viewMode === "contributors" ? (b.hours || 0) - (a.hours || 0) : b.points - a.points);
       setScores(rows);
-    } catch (e) { console.error(e); }
+    } catch { }
   }, [viewMode, selectedMonth, cachedLeaderboardStats, cachedStudentsData, sessionScores]);
 
   const studentNameByEnrollment = useMemo(() => {
@@ -993,7 +993,7 @@ export default function Scores() {
   };
 
   return (
-    <div style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif", maxWidth: 1160, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <div style={{ maxWidth: 1160, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       
       {/* Top Bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, gap: 14, flexWrap: "wrap", flexShrink: 0 }}>

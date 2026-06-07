@@ -201,8 +201,7 @@ export default function Attendance() {
         setCachedStudentsData(parseList(stuResponse));
 
         setLoading(false);
-      } catch (error) {
-        console.error("Error fetching attendance data:", error);
+      } catch {
         toast({
           variant: "destructive",
           title: "Error",
@@ -250,9 +249,7 @@ export default function Attendance() {
           () => true,
         ),
       );
-    } catch (error) {
-      console.error("Error processing attendance data:", error);
-    }
+    } catch { }
   }, [attendanceDate, cachedAttendanceData, cachedStudentsData, canEdit, ownEnrollment, selectedMonth, viewMode]);
 
   // Reset to page 1 when attendance date changes
@@ -835,7 +832,7 @@ export default function Attendance() {
           </div>
         </div>
         <div className="hidden lg:flex flex-col items-center justify-start pt-20 pr-10">
-          <img src="/Attendance.jpg" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />
+          <img src="/Attendance.webp" alt="Attendance" className="max-w-xs rounded-lg shadow-[0_0_50px_rgba(234,216,192,1),0_0_20px_rgba(255,255,255,0.4)] border-4 border-[#EAD8C0] transform hover:scale-[1.02] transition-transform duration-500" />
         </div>
       </motion.div>
 

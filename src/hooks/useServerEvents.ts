@@ -33,7 +33,6 @@ function dispatch(eventType: string, data: Record<string, unknown>) {
     try {
       handler(data);
     } catch (err) {
-      console.error(`[SSE] Handler error for ${eventType}:`, err);
     }
   });
 }
@@ -59,13 +58,9 @@ function ensureConnection() {
   eventSource = new EventSource(url);
   attachSourceListeners();
 
-  eventSource.onopen = () => {
-    console.debug("[SSE] Connected:", url);
-  };
+  eventSource.onopen = () => {};
 
-  eventSource.onerror = () => {
-    console.debug("[SSE] Reconnecting…");
-  };
+  eventSource.onerror = () => {};
 }
 
 function maybeCloseConnection() {
@@ -74,7 +69,6 @@ function maybeCloseConnection() {
   if (total === 0 && eventSource) {
     eventSource.close();
     eventSource = null;
-    console.debug("[SSE] Closed (no subscribers)");
   }
 }
 

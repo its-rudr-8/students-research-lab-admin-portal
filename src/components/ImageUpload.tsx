@@ -49,9 +49,6 @@ export default function ImageUpload({
 
   useEffect(() => {
     // Debug log to trace media initialization
-    if (currentImage) {
-      console.log(`[ImageUpload] Initializing with currentImage: ${currentImage} | isVideo: ${isVideoUrl(currentImage)}`);
-    }
     setPreview(currentImage || null);
     // If it's an external URL, reset isLocalVideo as we rely on the robust detection
     if (currentImage && !currentImage.startsWith("blob:")) {
@@ -119,7 +116,6 @@ export default function ImageUpload({
       setPreview(previousPreview);
       setIsLocalVideo(previousPreview ? isVideoUrl(previousPreview) : false);
 
-      console.error("[ImageUpload] Upload error:", error);
       toast({
         variant: "destructive",
         title: "Upload failed",

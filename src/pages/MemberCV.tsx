@@ -260,6 +260,7 @@ export default function MemberCV() {
   const [search, setSearch] = useState("");
   const [batchFilter, setBatchFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [papersExpanded, setPapersExpanded] = useState(false);
 
 
   const { toast } = useToast();
@@ -296,11 +297,11 @@ export default function MemberCV() {
         const cvMap = new Map<string, { ongoing: number; hacks: number; papers: number }>();
         (allCVs as any[]).forEach((cv: any) => {
           if (!cv?.enrollment_no) return;
-          const rw: string[] = Array.isArray(cv.research_work) ? cv.research_work : [];
+          const rp: any[] = Array.isArray(cv.research_papers) ? cv.research_papers : [];
           cvMap.set(cv.enrollment_no, {
-            ongoing: rw.filter((w: string) => w.trim().toLowerCase().startsWith("ongoing")).length,
+            ongoing: rp.filter((p: any) => (p?.status ?? "").toLowerCase() === "ongoing").length,
             hacks: Array.isArray(cv.hackathons) ? cv.hackathons.length : 0,
-            papers: Array.isArray(cv.research_papers) ? cv.research_papers.length : 0,
+            papers: rp.filter((p: any) => (p?.status ?? "").toLowerCase() !== "ongoing").length,
           });
         });
 
@@ -367,6 +368,7 @@ export default function MemberCV() {
         setFormData(emptyFormData());
         return;
       }
+      setPapersExpanded(false);
       try {
         setLoadingProfile(true);
         // getMemberCVByEnrollment now returns the unwrapped data object (or null)
@@ -695,7 +697,6 @@ export default function MemberCV() {
             <div className="border-t border-dashed border-[#D4C9B6]" />
 
             <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="🔬 Research Areas" field="research_areas" placeholder="Cloud Computing Optimization&#10;Microservices Architecture" hint="One per line" />
-            <TextSection formData={formData} setFormData={setFormData} disabled={!canEditSelected} label="📁 Research Work" field="research_work" placeholder="Ongoing Research Paper: NLP Study&#10;Completed: Smart Parking System" hint="Prefix with 'Ongoing' for badge · one per line" />
             
             {/* Research Papers Section with JSON format */}
             <div className="space-y-3">
@@ -707,51 +708,81 @@ export default function MemberCV() {
                 {formData.research_papers.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">No research papers added yet</p>
                 ) : (
-                  formData.research_papers.map((paper, idx) => (
-                    <div key={idx} className="p-4 bg-white border border-[#D4C9B6] rounded-lg space-y-2">
-                      <Input
-                        placeholder="Paper Title"
-                        value={paper.title}
-                        onChange={(e) => {
-                          const updated = [...formData.research_papers];
-                          updated[idx].title = e.target.value;
-                          setFormData({ ...formData, research_papers: updated });
-                        }}
-                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
-                        disabled={!canEditSelected}
-                      />
-                      <Input
-                        placeholder="Paper Link (https://...)"
-                        value={paper.link}
-                        onChange={(e) => {
-                          const updated = [...formData.research_papers];
-                          updated[idx].link = e.target.value;
-                          setFormData({ ...formData, research_papers: updated });
-                        }}
-                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
-                        disabled={!canEditSelected}
-                      />
-                      <div className="flex gap-2">
-                        <select
-                          value={paper.status}
-                          onChange={(e) => {
-                            const updated = [...formData.research_papers];
-                            updated[idx].status = e.target.value as any;
-                            setFormData({ ...formData, research_papers: updated });
-                          }}
-                          className="flex-1 px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
-                          disabled={!canEditSelected}
+                  <>
+                    {formData.research_papers.map((paper, idx) => {
+                      const isHidden = idx >= 1;
+                      return (
+                        <AnimatePresence key={idx}>
+                          {(!isHidden || papersExpanded) && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="p-4 bg-white border border-[#D4C9B6] rounded-lg space-y-2"
+                            >
+                              <Input
+                                placeholder="Paper Title"
+                                value={paper.title}
+                                onChange={(e) => {
+                                  const updated = [...formData.research_papers];
+                                  updated[idx].title = e.target.value;
+                                  setFormData({ ...formData, research_papers: updated });
+                                }}
+                                className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                                disabled={!canEditSelected}
+                              />
+                              <Input
+                                placeholder="Paper Link (https://...)"
+                                value={paper.link}
+                                onChange={(e) => {
+                                  const updated = [...formData.research_papers];
+                                  updated[idx].link = e.target.value;
+                                  setFormData({ ...formData, research_papers: updated });
+                                }}
+                                className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                                disabled={!canEditSelected}
+                              />
+                              <div className="flex gap-2">
+                                <select
+                                  value={paper.status}
+                                  onChange={(e) => {
+                                    const updated = [...formData.research_papers];
+                                    updated[idx].status = e.target.value as any;
+                                    setFormData({ ...formData, research_papers: updated });
+                                  }}
+                                  className="flex-1 px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
+                                  disabled={!canEditSelected}
+                                >
+                                  <option value="ongoing">Ongoing</option>
+                                  <option value="completed">Completed</option>
+                                  <option value="published">Published</option>
+                                </select>
+                                {canEditSelected && (
+                                  <ResearchPaperDeleteButton idx={idx} formData={formData} setFormData={setFormData} />
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      );
+                    })}
+                    {formData.research_papers.length > 1 && (
+                      <div className="flex justify-center pt-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPapersExpanded((v) => !v)}
+                          className="text-[#2A5D4B] hover:text-[#21493A] hover:bg-[#2A5D4B]/10 font-bold flex items-center gap-1.5 rounded-full px-4"
                         >
-                          <option value="ongoing">Ongoing</option>
-                          <option value="completed">Completed</option>
-                          <option value="published">Published</option>
-                        </select>
-                        {canEditSelected && (
-                          <ResearchPaperDeleteButton idx={idx} formData={formData} setFormData={setFormData} />
-                        )}
+                          {papersExpanded
+                            ? "Show Less"
+                            : `Show More (${formData.research_papers.length - 1} more)`}
+                        </Button>
                       </div>
-                    </div>
-                  ))
+                    )}
+                  </>
                 )}
                 {canEditSelected && (
                   <Button
@@ -891,7 +922,7 @@ export default function MemberCV() {
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center shrink-0"><Folder className="w-6 h-6 text-[#2A5D4B]" /></div>
                 <div>
-                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_work.split("\n").filter(l => l.trim().toLowerCase().startsWith("ongoing")).length}</p>
+                  <p className="text-3xl font-bold text-[#21493A]">{formData.research_papers.filter(p => p.status === "ongoing").length}</p>
                   <p className="text-sm font-medium text-[#2A5D4B]/80 mt-1">Ongoing Projects</p>
                 </div>
               </div>

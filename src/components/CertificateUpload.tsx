@@ -208,20 +208,15 @@ export default function CertificateUpload({
         const processedFile = await processCertificateFile(file);
 
         // ── Update preview immediately after conversion ────────────────────
-        // For PDFs: the initial localPreview is a blob URL for the raw PDF,
-        // which <img> cannot render. After conversion we get a JPEG File —
-        // create a new blob URL from that and swap the preview right away,
-        // so the user sees the certificate image before upload finishes.
-        const isPdf = file.type === "application/pdf" ||
-          file.name.toLowerCase().endsWith(".pdf");
-        if (isPdf) {
-          const convertedPreviewUrl = URL.createObjectURL(processedFile);
-          setItems(prev => prev.map(it => {
-            if (it.id !== itemId) return it;
-            if (it.localPreview) URL.revokeObjectURL(it.localPreview); // revoke old PDF blob
-            return { ...it, localPreview: convertedPreviewUrl };
-          }));
-        }
+        // PDFs render to a <img>-incompatible blob URL. All other formats get
+        // re-encoded to WebP, so we always swap the preview to the converted
+        // file so the user sees the result before the upload finishes.
+        const convertedPreviewUrl = URL.createObjectURL(processedFile);
+        setItems(prev => prev.map(it => {
+          if (it.id !== itemId) return it;
+          if (it.localPreview) URL.revokeObjectURL(it.localPreview);
+          return { ...it, localPreview: convertedPreviewUrl };
+        }));
 
         const fd = new FormData();
         fd.append("file", processedFile);
@@ -293,7 +288,7 @@ export default function CertificateUpload({
           <h3 className="text-base font-bold text-[#1a1810]">📜 Certifications</h3>
         </div>
         <span className="text-[11px] text-muted-foreground italic">
-          JPG, PNG, WebP, PDF · max 10MB each
+          JPG, PNG, WebP, AVIF, PDF · stored as WebP · max 10MB
         </span>
       </div>
 
@@ -386,7 +381,7 @@ export default function CertificateUpload({
                 {anyUploading ? "Uploading certificates..." : "Drop certificates here or click to browse"}
               </p>
               <p className="text-[11px] text-[#8B735B]/60 mt-0.5 font-medium uppercase tracking-wider">
-                Supports JPG, PNG, WebP, PDF · up to 10MB each · multiple allowed
+                Supports JPG, PNG, WebP, AVIF, PDF · converted to WebP · up to 10MB each · multiple allowed
               </p>
             </div>
           </div>
@@ -503,7 +498,7 @@ const CertCard = memo(function CertCard({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm z-10">
             <Loader2 className="w-7 h-7 animate-spin text-[#2A5D4B] mb-2" />
             <span className="text-xs font-bold text-[#2A5D4B] uppercase tracking-widest">
-              {item.localPreview ? "Uploading..." : "Converting PDF..."}
+              {item.localPreview ? "Uploading..." : "Converting to WebP..."}
             </span>
           </div>
         )}

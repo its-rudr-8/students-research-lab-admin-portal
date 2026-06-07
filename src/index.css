@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,200..900;1,7..72,200..900&display=swap&family=IBM+Plex+Mono:wght@400;500');
 
 @tailwind base;
 @tailwind components;
@@ -120,7 +120,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: "Inter", sans-serif;
+    font-family: "Literata", "Iowan Old Style", "Baskerville", Georgia, serif;
     background-image:
       radial-gradient(circle at 0% 0%, hsl(var(--primary) / 0.08) 0, transparent 34%),
       linear-gradient(180deg, hsl(0 0% 100%), hsl(var(--background)) 38%);
@@ -169,7 +169,7 @@
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
-    font-family: "Sora", sans-serif;
+    font-family: "Literata", "Iowan Old Style", "Baskerville", Georgia, serif;
   }
 }
 

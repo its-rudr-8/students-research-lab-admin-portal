@@ -311,7 +311,7 @@ export default function Students() {
   const THcls = ["", "hidden lg:table-cell", "hidden md:table-cell", "", "hidden xl:table-cell", ""];
 
   return (
-    <div style={{ fontFamily: "'Inter','Plus Jakarta Sans',sans-serif", maxWidth: 1160 }}>
+    <div style={{ maxWidth: 1160 }}>
       {/* Top Bar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, gap: 14, flexWrap: "wrap" as const }}>
         <div style={{ position: "relative", width: 360 }}>

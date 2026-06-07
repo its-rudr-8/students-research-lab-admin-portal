@@ -19,8 +19,8 @@ export const setAuthToken = (token: string) => {
   try {
     localStorage.setItem("adminToken", token);
     localStorage.setItem("authToken", token);
-  } catch (error) {
-    console.error("Failed to save auth token:", error);
+  } catch {
+    // localStorage unavailable — silently ignore
   }
 };
 
@@ -29,8 +29,8 @@ export const clearAuthToken = () => {
   try {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("authToken");
-  } catch (error) {
-    console.error("Failed to clear auth token:", error);
+  } catch {
+    // localStorage unavailable — silently ignore
   }
 };
 
@@ -55,9 +55,6 @@ const apiCall = async (
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;
-  } else if (!endpoint.includes("/login")) {
-    // If no token and not logging in, this will fail with 401
-    console.warn("No auth token found for protected endpoint:", endpoint);
   }
 
   const options: RequestInit = {
@@ -71,17 +68,14 @@ const apiCall = async (
 
   try {
     const fullUrl = `${API_BASE_URL}/api${endpoint}`;
-    console.debug(`[API] ${method} ${endpoint}${token ? " (with token)" : " (no token)"}`);
-    
     const response = await fetch(fullUrl, options);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      console.error(`[API Error] ${method} ${endpoint} - Status: ${response.status}`);
 
-      // Handle 401 - clear token and redirect to login
-      if (response.status === 401) {
-        console.error("Unauthorized (401) - clearing token and redirecting to login");
+      // Handle 401 - only redirect when the request is NOT the login endpoint itself.
+      // Redirecting on a login 401 would reload the page and wipe the form.
+      if (response.status === 401 && !endpoint.includes("/login")) {
         clearAuthToken();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
@@ -105,7 +99,6 @@ const apiCall = async (
     }
 
     const data = await response.json();
-    console.debug(`[API Success] ${method} ${endpoint}`);
     return data;
   } catch (error: any) {
     // Re-throw with better error messages
@@ -592,7 +585,6 @@ export const adminAPI = {
       // In development mode, always send dev-token header
       if (import.meta.env.DEV) {
         headers["x-dev-token"] = "dev-bypass";
-        console.log(`[API] POST /admin/upload-image - Using dev bypass`);
       } else if (token) {
         // In production, use actual token
         headers.Authorization = `Bearer ${token}`;
@@ -609,7 +601,6 @@ export const adminAPI = {
         
         // Handle 401 - clear token and redirect to login
         if (response.status === 401) {
-          console.error("Unauthorized (401) - clearing token and redirecting to login");
           clearAuthToken();
           if (typeof window !== "undefined") {
             window.location.href = "/login";
