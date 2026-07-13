@@ -106,6 +106,8 @@ export default function CertificateUpload({
   );
   const [isDragging, setIsDragging] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Draft field for the manual add form (name only; image comes from the drop zone)
+  const [draftName, setDraftName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -153,13 +155,16 @@ export default function CertificateUpload({
     });
   }, [notifyParent]);
 
-  // ── Add empty (manual entry) ──────────────────────────────────────────────
-  const handleAddEmpty = useCallback(() => {
-    setIsExpanded(true); // Automatically expand list when manually adding
-    const newItem: CertItem = { id: newId(), name: "", url: "", uploading: false };
-    // Do NOT notify parent yet — user hasn't typed anything meaningful
-    setItems(prev => [...prev, newItem]);
-  }, []);
+  // ── Add manual entry (name + URL filled in the top form) ──────────────────
+  const handleAddManual = useCallback((name: string, url: string) => {
+    setIsExpanded(true);
+    const newItem: CertItem = { id: newId(), name: name.trim(), url: url.trim(), uploading: false };
+    setItems(prev => {
+      const next = [newItem, ...prev];
+      notifyParent(next);
+      return next;
+    });
+  }, [notifyParent]);
 
   // ── Replace click ─────────────────────────────────────────────────────────
   const handleReplaceClick = useCallback((id: string) => {
@@ -292,59 +297,6 @@ export default function CertificateUpload({
         </span>
       </div>
 
-      {/* Certificate cards */}
-      {items.length > 0 && (
-        <div className="space-y-4">
-          <motion.div layout="position" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {items.map((item, idx) => {
-              const isHidden = idx >= 2;
-              return (
-                <AnimatePresence key={item.id} initial={false}>
-                  {(!isHidden || isExpanded) && (
-                    <motion.div
-                      layout
-                      initial={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
-                      transition={{ duration: 0.25, ease: "easeInOut" }}
-                      className="w-full"
-                    >
-                      <CertCard
-                        item={item}
-                        disabled={disabled}
-                        onNameCommit={handleNameCommit}
-                        onUrlCommit={handleUrlCommit}
-                        onRemove={handleRemove}
-                        onReplace={handleReplaceClick}
-                      />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              );
-            })}
-          </motion.div>
-
-          {/* Show More / Show Less button */}
-          {items.length > 2 && (
-            <div className="flex justify-center pt-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="text-[#2A5D4B] hover:text-[#21493A] hover:bg-[#2A5D4B]/10 font-bold flex items-center gap-1.5 rounded-full px-4"
-              >
-                {isExpanded ? (
-                  <>Show Less</>
-                ) : (
-                  <>Show More ({items.length - 2} more)</>
-                )}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Drop zone */}
       {!disabled && (
         <div
@@ -397,19 +349,84 @@ export default function CertificateUpload({
         onChange={handleReplaceChange}
       />
 
-      {/* Manual add button */}
+      {/* Manual add form — fill name + URL, then Add */}
       {!disabled && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full border-[#D4C9B6] text-[#1a1810] hover:bg-[#F3F0E8]"
-          onClick={(e) => { e.stopPropagation(); handleAddEmpty(); }}
-          disabled={anyUploading}
-        >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          Add Certification Manually (Name + URL)
-        </Button>
+        <div className="border border-dashed border-[#D4C9B6] rounded-xl p-3 bg-white/50 flex gap-2">
+          <Input
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            placeholder="Certificate name (e.g. AWS Cloud Practitioner)"
+            className="bg-white border-[#D4C9B6] rounded-xl text-sm h-9 flex-1"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-[#D4C9B6] text-[#1a1810] hover:bg-[#F3F0E8] h-9 shrink-0"
+            disabled={anyUploading || !draftName.trim()}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAddManual(draftName, "");
+              setDraftName("");
+            }}
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add
+          </Button>
+        </div>
+      )}
+
+      {/* Certificate cards */}
+      {items.length > 0 && (
+        <div className="space-y-4">
+          <motion.div layout="position" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {items.map((item, idx) => {
+              const isHidden = idx >= 2;
+              return (
+                <AnimatePresence key={item.id} initial={false}>
+                  {(!isHidden || isExpanded) && (
+                    <motion.div
+                      layout
+                      initial={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={isHidden ? { opacity: 0, scale: 0.95 } : undefined}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      className="w-full"
+                    >
+                      <CertCard
+                        item={item}
+                        disabled={disabled}
+                        onNameCommit={handleNameCommit}
+                        onUrlCommit={handleUrlCommit}
+                        onRemove={handleRemove}
+                        onReplace={handleReplaceClick}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              );
+            })}
+          </motion.div>
+
+          {/* Show More / Show Less button */}
+          {items.length > 2 && (
+            <div className="flex justify-center pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-[#2A5D4B] hover:text-[#21493A] hover:bg-[#2A5D4B]/10 font-bold flex items-center gap-1.5 rounded-full px-4"
+              >
+                {isExpanded ? (
+                  <>Show Less</>
+                ) : (
+                  <>Show More ({items.length - 2} more)</>
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Empty state */}
