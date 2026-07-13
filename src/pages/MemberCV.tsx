@@ -100,7 +100,7 @@ function ResearchPaperDeleteButton({ idx, formData, setFormData }: { idx: number
     <Button
       variant="ghost"
       size="sm"
-      className="text-red-500 hover:bg-red-50"
+      className="border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
       onClick={async () => {
         const ok = await confirm({ title: "Delete research paper", description: "Remove this research paper from the CV?" });
         if (!ok) return;
@@ -119,7 +119,7 @@ function PatentDeleteButton({ idx, formData, setFormData }: { idx: number; formD
     <Button
       variant="ghost"
       size="sm"
-      className="w-full text-red-500 hover:bg-red-50"
+      className="w-full border border-red-200 text-red-500 hover:bg-red-50 hover:text-red-600 hover:border-red-300"
       onClick={async () => {
         const ok = await confirm({ title: "Delete patent", description: "Remove this patent from the CV?" });
         if (!ok) return;
@@ -237,10 +237,18 @@ const TextSection = ({ label, field, placeholder, hint, formData, setFormData, d
       {hint && <span className="text-[11px] text-muted-foreground italic">{hint}</span>}
     </div>
     <Textarea
+      rows={4}
       value={formData[field] as string}
       onChange={(e) => setFormData((prev) => ({ ...prev, [field]: e.target.value }))}
       placeholder={placeholder}
-      className="bg-white border-[#D4C9B6] rounded-xl min-h-[80px] text-sm"
+      // Fixed height: 4 entries visible, scroll for the rest
+      className="bg-white border-[#D4C9B6] rounded-xl text-sm resize-none h-[92px] overflow-y-auto pr-3
+        [&::-webkit-scrollbar]:w-1.5
+        [&::-webkit-scrollbar-track]:bg-transparent
+        [&::-webkit-scrollbar-track]:my-2
+        [&::-webkit-scrollbar-thumb]:bg-[#EAD8C0]
+        [&::-webkit-scrollbar-thumb]:rounded-full
+        hover:[&::-webkit-scrollbar-thumb]:bg-[#d4bc9a]"
       disabled={disabled}
     />
   </div>
@@ -250,7 +258,8 @@ export default function MemberCV() {
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingMode, setSavingMode] = useState<null | "draft" | "submit">(null);
+  const saving = savingMode !== null;
   const [selectedEnrollment, setSelectedEnrollment] = useState("");
   const [formData, setFormData] = useState<CVFormData>(emptyFormData());
 
@@ -261,6 +270,11 @@ export default function MemberCV() {
   const [batchFilter, setBatchFilter] = useState("");
   const [page, setPage] = useState(1);
   const [papersExpanded, setPapersExpanded] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const topRef = useRef<HTMLDivElement>(null);
+  // Draft rows for the "add new" forms shown on top of each list
+  const [paperDraft, setPaperDraft] = useState<ResearchPaper>({ title: "", link: "", status: "" as any });
+  const [patentDraft, setPatentDraft] = useState<Patent>({ patent_title: "", application_date: "", application_status: "" as any, application_number: "" });
 
 
   const { toast } = useToast();
@@ -369,6 +383,9 @@ export default function MemberCV() {
         return;
       }
       setPapersExpanded(false);
+      setDraftSaved(false);
+      setPaperDraft({ title: "", link: "", status: "" as any });
+      setPatentDraft({ patent_title: "", application_date: "", application_status: "" as any, application_number: "" });
       try {
         setLoadingProfile(true);
         // getMemberCVByEnrollment now returns the unwrapped data object (or null)
@@ -413,9 +430,15 @@ export default function MemberCV() {
 
 
 
-  const canEditSelected = !!selectedEnrollment && (!!isAdmin || (currentUser?.enrollmentNo && currentUser.enrollmentNo === selectedEnrollment));
+  // Non-admins only ever load their own profile; match case-insensitively by
+  // enrollment OR email so a case mismatch / email-only token doesn't lock them out.
+  const canEditSelected = !!selectedEnrollment && (
+    !!isAdmin ||
+    (!!currentEnrollment && currentEnrollment === String(selectedEnrollment).toUpperCase()) ||
+    (!!currentEmail && currentEmail === String(selectedMember?.email || "").trim().toLowerCase())
+  );
 
-  const handleSave = async () => {
+  const handleSave = async (asDraft = false) => {
     if (!selectedMember || !selectedEnrollment)
       return toast({ variant: "destructive", title: "No profile selected", description: "Please select a member profile first." });
     if (!canEditSelected)
@@ -436,7 +459,7 @@ export default function MemberCV() {
     }
 
     try {
-      setSaving(true);
+      setSavingMode(asDraft ? "draft" : "submit");
       const payload = {
         enrollment_no: selectedEnrollment,
         student_name: formData.student_name || selectedMember.student_name,
@@ -460,8 +483,13 @@ export default function MemberCV() {
         patents: formData.patents, // Now sending as JSON array
       };
       await adminAPI.updateMemberCV(payload);
-      toast({ title: "Profile saved", description: `CV updated for ${selectedMember.student_name}.` });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      setDraftSaved(asDraft);
+      toast(
+        asDraft
+          ? { title: "Saved as draft", description: `Your changes for ${selectedMember.student_name} are saved as a draft.` }
+          : { title: "Profile submitted", description: `CV updated for ${selectedMember.student_name}.` }
+      );
+      topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       if (isAdmin) {
         setSelectedEnrollment("");
         setShowGrid(true);
@@ -469,7 +497,7 @@ export default function MemberCV() {
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save failed", description: error.message || "Could not save profile." });
     } finally {
-      setSaving(false);
+      setSavingMode(null);
     }
   };
 
@@ -600,10 +628,17 @@ export default function MemberCV() {
 
   // Render Edit Suite
   return (
-    <div className="max-w-[1200px] mx-auto min-h-[calc(100vh-100px)] relative pb-12">
+    <div ref={topRef} className="max-w-[1200px] mx-auto min-h-[calc(100vh-100px)] relative pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-[#1a1810] tracking-tight">Edit Researcher Profile</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl font-bold text-[#1a1810] tracking-tight">Edit Researcher Profile</h1>
+            {draftSaved && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-300">
+                Draft — Submit to save
+              </span>
+            )}
+          </div>
           {selectedMember && (
             <p className="text-muted-foreground mt-1 text-sm font-medium">Update the details for {selectedMember.student_name} ({selectedMember.enrollment_no})</p>
           )}
@@ -662,7 +697,7 @@ export default function MemberCV() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Batch</Label>
                 <Select value={formData.batch} onValueChange={(value) => setFormData((p) => ({ ...p, batch: value }))} disabled={!canEditSelected}>
@@ -678,10 +713,11 @@ export default function MemberCV() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
+              {/* Dept field commented out — DB has no department column; value maps to Branch. Re-enable if a real column is added. */}
+              {/* <div className="space-y-1">
                 <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Dept</Label>
                 <Input value={formData.department} onChange={(e) => setFormData(p => ({ ...p, department: e.target.value }))} placeholder="CE" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
-              </div>
+              </div> */}
               <div className="space-y-1">
                 <Label className="text-xs font-bold text-[#1a1810] uppercase tracking-wide">Institute</Label>
                 <Input value={formData.institute} onChange={(e) => setFormData(p => ({ ...p, institute: e.target.value }))} placeholder="LDRP-ITR" className="bg-white border-[#D4C9B6] rounded-xl" disabled={!canEditSelected} />
@@ -705,6 +741,46 @@ export default function MemberCV() {
                 <span className="text-[11px] text-muted-foreground italic">Title, Link, Status</span>
               </div>
               <div className="space-y-3 bg-white/50 p-4 rounded-xl border border-[#D4C9B6]">
+                {canEditSelected && (
+                  <div className="p-4 bg-white border border-dashed border-[#D4C9B6] rounded-lg space-y-2">
+                    <Input
+                      placeholder="Paper Title"
+                      value={paperDraft.title}
+                      onChange={(e) => setPaperDraft({ ...paperDraft, title: e.target.value })}
+                      className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                    />
+                    <Input
+                      placeholder="Paper Link (https://...)"
+                      value={paperDraft.link}
+                      onChange={(e) => setPaperDraft({ ...paperDraft, link: e.target.value })}
+                      className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={paperDraft.status}
+                        onChange={(e) => setPaperDraft({ ...paperDraft, status: e.target.value as any })}
+                        className="flex-1 px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
+                      >
+                        <option value="" disabled>Select status</option>
+                        <option value="ongoing">Ongoing</option>
+                        <option value="completed">Completed</option>
+                        <option value="published">Published</option>
+                      </select>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-[#D4C9B6] text-[#1a1810]"
+                        disabled={!paperDraft.title.trim() || !paperDraft.status}
+                        onClick={() => {
+                          setFormData({ ...formData, research_papers: [paperDraft, ...formData.research_papers] });
+                          setPaperDraft({ title: "", link: "", status: "" as any });
+                        }}
+                      >
+                        + Add Research Paper
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {formData.research_papers.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">No research papers added yet</p>
                 ) : (
@@ -784,21 +860,6 @@ export default function MemberCV() {
                     )}
                   </>
                 )}
-                {canEditSelected && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-[#D4C9B6] text-[#1a1810]"
-                    onClick={() => {
-                      setFormData({
-                        ...formData,
-                        research_papers: [...formData.research_papers, { title: "", link: "", status: "ongoing" }],
-                      });
-                    }}
-                  >
-                    + Add Research Paper
-                  </Button>
-                )}
               </div>
             </div>
 
@@ -830,6 +891,56 @@ export default function MemberCV() {
                 <span className="text-[11px] text-muted-foreground italic">Title, Application Date, Status</span>
               </div>
               <div className="space-y-3 bg-white/50 p-4 rounded-xl border border-[#D4C9B6]">
+                {canEditSelected && (
+                  <div className="p-4 bg-white border border-dashed border-[#D4C9B6] rounded-lg space-y-2">
+                    <Input
+                      placeholder="Patent Title"
+                      value={patentDraft.patent_title}
+                      onChange={(e) => setPatentDraft({ ...patentDraft, patent_title: e.target.value })}
+                      className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                    />
+                    <Input
+                      placeholder="Application Number"
+                      value={patentDraft.application_number}
+                      onChange={(e) => setPatentDraft({ ...patentDraft, application_number: e.target.value })}
+                      className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Application Date (YYYY-MM-DD)"
+                        type="date"
+                        max={getLocalTodayString()}
+                        value={patentDraft.application_date}
+                        onChange={(e) => setPatentDraft({ ...patentDraft, application_date: e.target.value })}
+                        className="bg-white border-[#D4C9B6] rounded-xl text-sm"
+                      />
+                      <select
+                        value={patentDraft.application_status}
+                        onChange={(e) => setPatentDraft({ ...patentDraft, application_status: e.target.value as any })}
+                        className="px-3 py-2 border border-[#D4C9B6] rounded-xl text-sm bg-white"
+                      >
+                        <option value="" disabled>Select status</option>
+                        <option value="Filed">Filed</option>
+                        <option value="Under Review">Under Review</option>
+                        <option value="Published">Published</option>
+                        <option value="Granted">Granted</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-[#D4C9B6] text-[#1a1810]"
+                      disabled={!patentDraft.patent_title.trim() || !patentDraft.application_status}
+                      onClick={() => {
+                        setFormData({ ...formData, patents: [patentDraft, ...formData.patents] });
+                        setPatentDraft({ patent_title: "", application_date: "", application_status: "" as any, application_number: "" });
+                      }}
+                    >
+                      + Add Patent
+                    </Button>
+                  </div>
+                )}
                 {formData.patents.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">No patents added yet</p>
                 ) : (
@@ -894,21 +1005,6 @@ export default function MemberCV() {
                     </div>
                   ))
                 )}
-                {canEditSelected && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full border-[#D4C9B6] text-[#1a1810]"
-                    onClick={() => {
-                      setFormData({
-                        ...formData,
-                        patents: [...formData.patents, { patent_title: "", application_date: "", application_status: "Filed", application_number: "" }],
-                      });
-                    }}
-                  >
-                    + Add Patent
-                  </Button>
-                )}
               </div>
             </div>
           </div>
@@ -946,28 +1042,30 @@ export default function MemberCV() {
           {/* Bottom Actions (Non-sticky form footer) */}
           <div className="bg-[#EDE8DE] rounded-[24px] p-6 mt-6 border border-[#D4C9B6] shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="w-full sm:w-auto text-center sm:text-left">
-              <Button 
-                onClick={handleSave} 
-                disabled={saving || !canEditSelected} 
+              <Button
+                onClick={() => handleSave(true)}
+                disabled={saving || !canEditSelected}
                 className="bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-xl px-8 py-3.5 font-semibold shadow-md w-full sm:w-auto"
               >
-                {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Save Draft"}
+                {savingMode === "draft" ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : "Save Draft"}
               </Button>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <Button 
-                variant="outline" 
-                className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-xl px-8 py-3.5 font-semibold bg-white" 
-                onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}
-              >
-                Back
-              </Button>
-              <Button 
-                className="flex-1 sm:flex-none bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-xl px-8 py-3.5 font-semibold shadow-md" 
-                onClick={handleSave} 
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  className="flex-1 sm:flex-none border-[#2A5D4B] text-[#2A5D4B] hover:bg-[#2A5D4B]/10 rounded-xl px-8 py-3.5 font-semibold bg-white"
+                  onClick={() => { setSelectedEnrollment(""); setShowGrid(true); }}
+                >
+                  Back
+                </Button>
+              )}
+              <Button
+                className="flex-1 sm:flex-none bg-[#2A5D4B] hover:bg-[#21493A] text-white rounded-xl px-8 py-3.5 font-semibold shadow-md"
+                onClick={() => handleSave(false)}
                 disabled={saving || !canEditSelected}
               >
-                {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</> : <>Submit <Check className="w-4 h-4 ml-2" /></>}
+                {savingMode === "submit" ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</> : <>Submit <Check className="w-4 h-4 ml-2" /></>}
               </Button>
             </div>
           </div>
