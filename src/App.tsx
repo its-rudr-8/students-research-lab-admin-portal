@@ -15,6 +15,7 @@ import Timeline from "@/pages/Timeline";
 import Achievements from "@/pages/Achievements";
 import JoinRequests from "@/pages/JoinRequests";
 import MemberCV from "./pages/MemberCV";
+import Guidelines from "@/pages/Guidelines";
 import SRLSessions from "./pages/SRLSessions";
 import Login from "@/pages/Login";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -185,6 +186,14 @@ const App = () => {
                   element={
                     <AdminOnlyRoute>
                       <JoinRequests />
+                    </AdminOnlyRoute>
+                  }
+                />
+                <Route
+                  path="/guidelines"
+                  element={
+                    <AdminOnlyRoute>
+                      <Guidelines />
                     </AdminOnlyRoute>
                   }
                 />

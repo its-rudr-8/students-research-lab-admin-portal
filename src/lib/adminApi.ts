@@ -655,6 +655,37 @@ export const adminAPI = {
     }
     return response.json();
   },
+
+  // Guidelines PDF APIs
+  async getGuidelines() {
+    return apiCall("/admin/guidelines", "GET");
+  },
+
+  async uploadGuideline(year: number, pdfFile: File) {
+    const token = getAuthToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const formData = new FormData();
+    formData.append("year", String(year));
+    formData.append("pdf", pdfFile);
+    const response = await fetch(`${API_BASE_URL}/api/admin/guidelines`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        clearAuthToken();
+        if (typeof window !== "undefined") window.location.href = "/login";
+        throw new Error("Session expired. Please log in again.");
+      }
+      throw new Error(errorData.message || `Upload failed: ${response.statusText}`);
+    }
+    return response.json();
+  },
 };
 
 export default adminAPI;
