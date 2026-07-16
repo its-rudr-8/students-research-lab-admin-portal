@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Award,
   Presentation,
+  FileText,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,6 +46,7 @@ const allNavItems = [
   { title: "SRL Sessions", path: "/sessions", icon: Presentation, requiresAdmin: true },
   { title: "Member CV", path: "/member-cv", icon: FileUser, requiresAdmin: false },
   { title: "Join Requests", path: "/join-requests", icon: ShieldCheck, requiresAdmin: true },
+  { title: "Guidelines", path: "/guidelines", icon: FileText, requiresAdmin: true },
 ];
 
 const pageNames: Record<string, string> = {
@@ -61,6 +63,7 @@ const pageNames: Record<string, string> = {
   "/sheet-sync": "Sync Google Sheets",
   "/google-sheets": "Google Sheets Data",
   "/join-requests": "Join Us Requests",
+  "/guidelines": "Guidelines",
 };
 
 export default function AdminLayout() {
